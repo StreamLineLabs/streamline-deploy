@@ -1,0 +1,33 @@
+# Available from both registries:
+# - ghcr.io/streamlinelabs/streamline:latest
+# - streamlinelabs/streamline:latest (Docker Hub)
+services:
+  streamline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamline
+    ports:
+      - "9092:9092"   # Kafka protocol
+      - "9094:9094"   # HTTP API
+    volumes:
+      - streamline_data:/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - STREAMLINE_LISTEN_ADDR=0.0.0.0:9092
+      - STREAMLINE_DATA_DIR=/data
+      - STREAMLINE_LOG_LEVEL=info
+      - RUST_LOG=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  streamline_data:
+    driver: local
