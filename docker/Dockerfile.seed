@@ -1,0 +1,11 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY seed-data.sh /seed-data.sh
+RUN chmod +x /seed-data.sh
+
+ENTRYPOINT ["/seed-data.sh"]

@@ -1,0 +1,62 @@
+# Streamline All-in-One Demo with Pre-Seeded Data
+#
+# Starts Streamline in playground mode and seeds demo topics with sample data.
+# Includes persistent volumes so data survives restarts.
+#
+# Usage:
+#   docker compose -f docker-compose.demo.yml up -d
+#
+#   # Verify demo topics
+#   docker compose -f docker-compose.demo.yml exec streamline streamline-cli topics list
+#
+#   # Consume from a demo topic
+#   docker compose -f docker-compose.demo.yml exec streamline \
+#     streamline-cli --broker localhost:9092 consume demo-events --from-beginning -n 5
+#
+#   # Tear down (preserves data volume)
+#   docker compose -f docker-compose.demo.yml down
+#
+#   # Tear down and remove data
+#   docker compose -f docker-compose.demo.yml down -v
+
+services:
+  streamline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamline-demo
+    ports:
+      - "9092:9092"   # Kafka protocol
+      - "9094:9094"   # HTTP API
+    command: ["--playground"]
+    volumes:
+      - streamline_demo_data:/data
+    environment:
+      - STREAMLINE_LISTEN_ADDR=0.0.0.0:9092
+      - STREAMLINE_DATA_DIR=/data
+      - STREAMLINE_LOG_LEVEL=info
+      - RUST_LOG=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  seed-data:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.seed
+    container_name: streamline-demo-seed
+    environment:
+      - STREAMLINE_HOST=streamline
+      - STREAMLINE_KAFKA_PORT=9092
+      - STREAMLINE_HTTP_PORT=9094
+    depends_on:
+      streamline:
+        condition: service_healthy
+
+volumes:
+  streamline_demo_data:
+    driver: local
