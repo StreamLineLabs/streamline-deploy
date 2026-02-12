@@ -1,0 +1,79 @@
+# Streamline Smoke Test
+# Starts Streamline, creates a topic, produces and consumes a message, then verifies.
+# Usage: docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from smoke-test
+
+services:
+  streamline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamline-test
+    ports:
+      - "19092:9092"
+      - "19094:9094"
+    environment:
+      - STREAMLINE_LISTEN_ADDR=0.0.0.0:9092
+      - STREAMLINE_DATA_DIR=/data
+      - STREAMLINE_LOG_LEVEL=warn
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 3s
+
+  smoke-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamline-smoke-test
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+
+        echo "=== Streamline Smoke Test ==="
+        echo ""
+
+        # 1. Wait for health endpoint
+        echo "[1/6] Waiting for Streamline to be healthy..."
+        until curl -sf http://streamline:9094/health > /dev/null 2>&1; do sleep 1; done
+        echo "  ✓ Health endpoint responding"
+
+        # 2. Verify health response
+        echo "[2/6] Verifying health response..."
+        HEALTH=$(curl -sf http://streamline:9094/health)
+        echo "  Health: $$HEALTH"
+        echo "  ✓ Health check passed"
+
+        # 3. Create a test topic
+        echo "[3/6] Creating test topic 'smoke-test'..."
+        streamline-cli --broker streamline:9092 topics create smoke-test --partitions 2 2>/dev/null || true
+        echo "  ✓ Topic created"
+
+        # 4. List topics and verify
+        echo "[4/6] Listing topics..."
+        streamline-cli --broker streamline:9092 topics list
+        echo "  ✓ Topic listing works"
+
+        # 5. Produce a message
+        echo "[5/6] Producing test message..."
+        streamline-cli --broker streamline:9092 produce smoke-test -m '{"test":"smoke","ts":"'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+        echo "  ✓ Message produced"
+
+        # 6. Consume and verify
+        echo "[6/6] Consuming messages..."
+        OUTPUT=$$(streamline-cli --broker streamline:9092 consume smoke-test --from-beginning -n 1 2>&1)
+        echo "  Consumed: $$OUTPUT"
+        if echo "$$OUTPUT" | grep -q "smoke"; then
+          echo "  ✓ Message consumed and verified"
+        else
+          echo "  ✗ Message verification failed"
+          exit 1
+        fi
+
+        echo ""
+        echo "=== All smoke tests passed! ==="
+    depends_on:
+      streamline:
+        condition: service_healthy

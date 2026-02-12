@@ -1,0 +1,72 @@
+# Multi-language Kafka client demo
+# Proves that standard Kafka clients work with Streamline unchanged.
+#
+# Usage:
+#   docker compose -f docker-compose.kafka-clients.yml up
+#
+# What happens:
+#   1. Streamline starts in playground mode with demo topics
+#   2. Python producer sends 5 messages using kafka-python
+#   3. Node.js consumer reads them back using KafkaJS
+#
+# This demonstrates cross-language Kafka compatibility with zero Streamline-specific code.
+
+services:
+  streamline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamline-clients-demo
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    command: ["--playground"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  python-producer:
+    image: python:3.12-slim
+    container_name: python-producer
+    working_dir: /app
+    volumes:
+      - ./examples/external-clients/python:/app:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        pip install -q -r requirements.txt 2>/dev/null
+        echo ""
+        echo "=== Python Producer (kafka-python) ==="
+        python producer.py
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=streamline:9092
+    depends_on:
+      streamline:
+        condition: service_healthy
+
+  nodejs-consumer:
+    image: node:20-slim
+    container_name: nodejs-consumer
+    working_dir: /app
+    volumes:
+      - ./examples/external-clients/nodejs:/app:ro
+      - nodejs_modules:/app/node_modules
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cp -r /app/* /tmp/app/ 2>/dev/null; cd /tmp/app
+        npm install --silent 2>/dev/null
+        echo ""
+        echo "=== Node.js Consumer (KafkaJS) ==="
+        node consumer.js
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=streamline:9092
+    depends_on:
+      python-producer:
+        condition: service_completed_successfully
+
+volumes:
+  nodejs_modules:
