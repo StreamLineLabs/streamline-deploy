@@ -1,0 +1,16 @@
+apiVersion: v2
+name: streamline
+description: A Helm chart for Streamline - The Redis of Streaming
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+keywords:
+  - streaming
+  - kafka
+  - messaging
+  - events
+home: https://github.com/streamlinelabs/streamline-deploy
+sources:
+  - https://github.com/streamlinelabs/streamline-deploy
+maintainers:
+  - name: josedab

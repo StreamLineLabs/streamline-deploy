@@ -1,0 +1,47 @@
+🚀 Streamline has been deployed!
+
+{{- $fullName := include "streamline.fullname" . }}
+
+📡 Kafka Protocol (port {{ .Values.service.kafkaPort }}):
+{{- if eq .Values.service.type "LoadBalancer" }}
+  export SERVICE_IP=$(kubectl get svc {{ $fullName }} -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  # Connect Kafka clients to: $SERVICE_IP:{{ .Values.service.kafkaPort }}
+{{- else if eq .Values.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get svc {{ $fullName }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.ports[?(@.name=="kafka")].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+  # Connect Kafka clients to: $NODE_IP:$NODE_PORT
+{{- else }}
+  kubectl port-forward svc/{{ $fullName }} {{ .Values.service.kafkaPort }}:{{ .Values.service.kafkaPort }} -n {{ .Release.Namespace }}
+  # Connect Kafka clients to: localhost:{{ .Values.service.kafkaPort }}
+{{- end }}
+
+🌐 HTTP API (port {{ .Values.service.httpPort }}):
+  kubectl port-forward svc/{{ $fullName }} {{ .Values.service.httpPort }}:{{ .Values.service.httpPort }} -n {{ .Release.Namespace }}
+  # Health check: curl http://localhost:{{ .Values.service.httpPort }}/health/ready
+
+{{- if .Values.externalService.enabled }}
+
+🔗 External Service:
+  An external {{ .Values.externalService.type }} service is enabled on port {{ .Values.externalService.kafkaPort }}.
+{{- end }}
+
+📖 Quick Start:
+  # Produce a message
+  streamline-cli produce demo -m "Hello from Kubernetes!"
+
+  # Consume messages
+  streamline-cli consume demo --from-beginning
+
+  # List topics
+  streamline-cli topics list
+
+{{- if .Values.metrics.enabled }}
+
+📊 Metrics:
+  Prometheus metrics are available at :{{ .Values.service.httpPort }}/metrics
+{{- if .Values.metrics.serviceMonitor.enabled }}
+  A ServiceMonitor has been created for Prometheus Operator.
+{{- end }}
+{{- end }}
+
+📚 Documentation: https://github.com/streamlinelabs/streamline-docs

@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "streamline.headlessServiceName" . }}
+  labels:
+    {{- include "streamline.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "streamline.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: kafka
+      port: {{ .Values.service.kafkaPort }}
+      targetPort: kafka
+    - name: inter-broker
+      port: 9093
+      targetPort: inter-broker
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      targetPort: http
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "streamline.fullname" . }}
+  labels:
+    {{- include "streamline.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "streamline.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: kafka
+      port: {{ .Values.service.kafkaPort }}
+      targetPort: kafka
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      targetPort: http
+
+{{- if .Values.externalService.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "streamline.fullname" . }}-external
+  labels:
+    {{- include "streamline.labels" . | nindent 4 }}
+  {{- with .Values.externalService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.externalService.type }}
+  selector:
+    {{- include "streamline.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: kafka
+      port: {{ .Values.externalService.kafkaPort }}
+      targetPort: kafka
+{{- end }}

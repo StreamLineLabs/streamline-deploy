@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "streamline.fullname" . }}
+  labels:
+    {{- include "streamline.labels" . | nindent 4 }}
+data:
+  STREAMLINE_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  RUST_LOG: {{ .Values.config.logLevel | quote }}
+  STREAMLINE_DATA_DIR: {{ .Values.config.dataDir | quote }}
+  STREAMLINE_LISTEN_ADDR: {{ .Values.config.kafkaAddr | quote }}
+  STREAMLINE_HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
+  {{- if .Values.config.clusterEnabled }}
+  STREAMLINE_CLUSTER_ENABLED: "true"
+  STREAMLINE_INTER_BROKER_PORT: {{ .Values.config.interBrokerPort | default 9093 | quote }}
+  {{- end }}

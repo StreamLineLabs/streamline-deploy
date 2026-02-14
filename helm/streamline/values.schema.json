@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of Streamline replicas"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Container image repository"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Container image tag"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "description": "Image pull policy"
+        }
+      },
+      "required": ["repository", "tag"]
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" }
+        }
+      },
+      "description": "Image pull secrets"
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override the chart name"
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Override the full release name"
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "logLevel": {
+          "type": "string",
+          "enum": ["trace", "debug", "info", "warn", "error"],
+          "description": "Server log level"
+        },
+        "dataDir": {
+          "type": "string",
+          "description": "Data directory path inside the container"
+        },
+        "kafkaAddr": {
+          "type": "string",
+          "pattern": "^[^:]+:[0-9]+$",
+          "description": "Kafka protocol listen address (host:port)"
+        },
+        "httpAddr": {
+          "type": "string",
+          "pattern": "^[^:]+:[0-9]+$",
+          "description": "HTTP API listen address (host:port)"
+        }
+      },
+      "description": "Streamline server configuration"
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "description": "Kubernetes service type"
+        },
+        "kafkaPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Kafka protocol port"
+        },
+        "httpPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "HTTP API port"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Service annotations"
+        }
+      }
+    },
+    "externalService": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable external LoadBalancer service"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["LoadBalancer", "NodePort"],
+          "description": "External service type"
+        },
+        "kafkaPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable persistent storage"
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "Storage class name (empty for default)"
+        },
+        "accessMode": {
+          "type": "string",
+          "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"],
+          "description": "PVC access mode"
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(Gi|Mi|Ti)$",
+          "description": "PVC size (e.g., 10Gi)"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "memory": { "type": "string" },
+            "cpu": { "type": "string" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "memory": { "type": "string" },
+            "cpu": { "type": "string" }
+          }
+        }
+      },
+      "description": "Container resource requests and limits"
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "fsGroup": { "type": "integer" },
+        "runAsNonRoot": { "type": "boolean" },
+        "runAsUser": { "type": "integer" }
+      },
+      "description": "Pod-level security context"
+    },
+    "securityContext": {
+      "type": "object",
+      "properties": {
+        "allowPrivilegeEscalation": { "type": "boolean" },
+        "readOnlyRootFilesystem": { "type": "boolean" },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "drop": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "description": "Container-level security context"
+    },
+    "livenessProbe": {
+      "type": "object",
+      "description": "Liveness probe configuration"
+    },
+    "readinessProbe": {
+      "type": "object",
+      "description": "Readiness probe configuration"
+    },
+    "startupProbe": {
+      "type": "object",
+      "description": "Startup probe configuration"
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Node selector constraints"
+    },
+    "tolerations": {
+      "type": "array",
+      "items": { "type": "object" },
+      "description": "Pod tolerations"
+    },
+    "affinity": {
+      "type": "object",
+      "description": "Pod affinity rules"
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable pod disruption budget"
+        },
+        "minAvailable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum available pods"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Prometheus metrics"
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ServiceMonitor for Prometheus Operator"
+            },
+            "interval": {
+              "type": "string",
+              "description": "Scrape interval"
+            },
+            "scrapeTimeout": {
+              "type": "string",
+              "description": "Scrape timeout"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Graceful shutdown timeout in seconds"
+    }
+  },
+  "required": ["replicaCount", "image"]
+}

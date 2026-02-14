@@ -1,0 +1,146 @@
+# Default values for Streamline Helm chart
+
+# Number of replicas
+replicaCount: 1
+
+image:
+  repository: streamline
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Server configuration
+config:
+  logLevel: info
+  dataDir: /data
+  kafkaAddr: "0.0.0.0:9092"
+  httpAddr: "0.0.0.0:9094"
+  # Cluster settings (for multi-node)
+  # clusterEnabled: false
+  # interBrokerPort: 9093
+
+# Service configuration
+service:
+  type: ClusterIP
+  kafkaPort: 9092
+  httpPort: 9094
+  annotations: {}
+
+# External service (LoadBalancer)
+externalService:
+  enabled: false
+  type: LoadBalancer
+  kafkaPort: 9092
+  annotations: {}
+
+# Persistent storage
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+# Resource limits and requests
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Prometheus metrics
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+    labels: {}
+
+# Network policy
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+        - podSelector: {}  # same namespace
+      ports:
+        - port: 9092
+          protocol: TCP
+        - port: 9094
+          protocol: TCP
+  # Additional custom ingress/egress rules
+  additionalIngress: []
+  additionalEgress: []
+
+# Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: ~
+  additionalMetrics: []
+
+# Graceful shutdown
+terminationGracePeriodSeconds: 30
