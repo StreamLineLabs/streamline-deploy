@@ -1,0 +1,9 @@
+# Streamline Namespace
+# Creates an isolated namespace for Streamline components
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: streaming-platform

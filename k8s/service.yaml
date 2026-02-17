@@ -1,0 +1,74 @@
+# Streamline Services
+# Client-facing service and headless service for inter-pod communication
+---
+# Headless Service for StatefulSet
+# Provides stable network identities for pods (streamline-0.streamline-headless, etc.)
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamline-headless
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: headless-service
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: streamline
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092
+    - name: inter-broker
+      port: 9093
+      targetPort: 9093
+    - name: http
+      port: 9094
+      targetPort: 9094
+
+---
+# Client-facing Service
+# Load balances client traffic across Streamline pods
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamline
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: client-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: streamline
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092
+    - name: http
+      port: 9094
+      targetPort: 9094
+
+---
+# External Service (LoadBalancer)
+# Exposes Streamline to external clients (optional - use for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamline-external
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: external-service
+  annotations:
+    # AWS ALB annotations (customize for your cloud provider)
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: streamline
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092

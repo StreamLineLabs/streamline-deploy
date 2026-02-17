@@ -1,0 +1,27 @@
+# Kustomization for Streamline K8s deployment
+# Use: kubectl apply -k k8s/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: streamline
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - service.yaml
+  - statefulset.yaml
+  - pod-disruption-budget.yaml
+  # Uncomment if using Prometheus Operator
+  # - servicemonitor.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/part-of: streamline
+  app.kubernetes.io/managed-by: kustomize
+
+# Image customization
+# Override with: kustomize edit set image streamline=your-registry/streamline:v1.0.0
+images:
+  - name: streamline
+    newName: streamline
+    newTag: latest

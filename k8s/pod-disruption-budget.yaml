@@ -1,0 +1,17 @@
+# Streamline PodDisruptionBudget
+# Ensures high availability during cluster maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: streamline-pdb
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: availability
+spec:
+  # Ensure at least 1 pod is available during disruptions
+  # For 3-node cluster, this allows 2 pods to be unavailable
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: streamline

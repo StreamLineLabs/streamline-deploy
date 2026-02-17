@@ -1,0 +1,25 @@
+# Streamline ConfigMap
+# Configuration for Streamline server instances
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamline-config
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: configuration
+data:
+  # Server configuration
+  STREAMLINE_LOG_LEVEL: "info"
+  RUST_LOG: "info"
+
+  # Storage configuration
+  STREAMLINE_DATA_DIR: "/data"
+
+  # Network configuration (will be overridden per-pod for clustering)
+  STREAMLINE_LISTEN_ADDR: "0.0.0.0:9092"
+  STREAMLINE_HTTP_ADDR: "0.0.0.0:9094"
+
+  # Cluster configuration (for multi-node deployments)
+  # STREAMLINE_CLUSTER_ENABLED: "true"
+  # STREAMLINE_INTER_BROKER_PORT: "9093"

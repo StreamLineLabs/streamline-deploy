@@ -1,0 +1,23 @@
+# Streamline ServiceMonitor
+# Prometheus Operator resource for automatic metrics scraping
+# Requires Prometheus Operator to be installed in the cluster
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: streamline
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: streamline
+  namespaceSelector:
+    matchNames:
+      - streamline
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
