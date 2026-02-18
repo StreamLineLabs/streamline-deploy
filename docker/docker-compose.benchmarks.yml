@@ -1,0 +1,159 @@
+# Docker Compose for Streamline Comparative Benchmarks
+#
+# This file sets up Kafka and Redpanda for benchmark comparisons.
+#
+# Usage:
+#   docker compose -f docker-compose.benchmarks.yml up -d
+#   docker compose -f docker-compose.benchmarks.yml down -v
+#
+# Services:
+#   - zookeeper: Required for Kafka
+#   - kafka: Apache Kafka broker (port 9093)
+#   - redpanda: Redpanda broker (port 9094)
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Zookeeper (for Kafka)
+  # =============================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: benchmark-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - benchmark-network
+
+  # =============================================================================
+  # Apache Kafka
+  # =============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: benchmark-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9093:9093"
+      - "29093:29093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29093,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 6
+      # Performance tuning
+      KAFKA_LOG_RETENTION_HOURS: 1
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      # JVM settings for consistent benchmarking
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9093"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - benchmark-network
+
+  # =============================================================================
+  # Redpanda
+  # =============================================================================
+  redpanda:
+    image: redpandadata/redpanda:v23.3.5
+    hostname: redpanda
+    container_name: benchmark-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29094,OUTSIDE://0.0.0.0:9094
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29094,OUTSIDE://localhost:9094
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+      - --schema-registry-addr=0.0.0.0:8081
+      - --set=redpanda.auto_create_topics_enabled=true
+      - --set=redpanda.default_topic_partitions=6
+    ports:
+      - "9094:9094"
+      - "29094:29094"
+      - "8081:8081"
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - benchmark-network
+
+  # =============================================================================
+  # Prometheus (for metrics collection during benchmarks)
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    hostname: prometheus
+    container_name: benchmark-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=1h'
+    networks:
+      - benchmark-network
+    profiles:
+      - monitoring
+
+  # =============================================================================
+  # Grafana (for visualization during benchmarks)
+  # =============================================================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    hostname: grafana
+    container_name: benchmark-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - benchmark-network
+    profiles:
+      - monitoring
+
+networks:
+  benchmark-network:
+    driver: bridge
+
+volumes:
+  grafana-data:

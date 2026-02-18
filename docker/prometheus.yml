@@ -1,0 +1,29 @@
+# Prometheus configuration for Streamline benchmarks
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Streamline metrics
+  - job_name: 'streamline'
+    static_configs:
+      - targets: ['host.docker.internal:9094']
+    metrics_path: /metrics
+
+  # Kafka metrics (via JMX exporter if configured)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:7071']
+    metrics_path: /metrics
+
+  # Redpanda metrics
+  - job_name: 'redpanda'
+    static_configs:
+      - targets: ['redpanda:9644']
+    metrics_path: /public_metrics
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
