@@ -1,0 +1,110 @@
+# Streamline Prometheus Alerting Rules
+# Import into Prometheus: prometheus.yml → rule_files: ["alerts.yml"]
+
+groups:
+  - name: streamline.rules
+    rules:
+      # --- Latency Alerts ---
+      - alert: StreamlineHighProduceLatency
+        expr: histogram_quantile(0.99, rate(streamline_produce_latency_seconds_bucket[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High produce latency (p99 > 100ms)"
+          description: "Produce p99 latency is {{ $value | humanizeDuration }} on {{ $labels.instance }}."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/high-latency"
+
+      - alert: StreamlineHighFetchLatency
+        expr: histogram_quantile(0.99, rate(streamline_fetch_latency_seconds_bucket[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High fetch latency (p99 > 200ms)"
+          description: "Fetch p99 latency is {{ $value | humanizeDuration }} on {{ $labels.instance }}."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/high-latency"
+
+      # --- Consumer Lag Alerts ---
+      - alert: StreamlineConsumerLagHigh
+        expr: streamline_consumer_group_lag > 10000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consumer group lag exceeds 10,000 messages"
+          description: "Group {{ $labels.group }} on topic {{ $labels.topic }} partition {{ $labels.partition }} has lag of {{ $value }}."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/consumer-lag"
+
+      - alert: StreamlineConsumerLagCritical
+        expr: streamline_consumer_group_lag > 100000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Consumer group lag exceeds 100,000 messages"
+          description: "Group {{ $labels.group }} on topic {{ $labels.topic }} has critical lag of {{ $value }}."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/consumer-lag"
+
+      # --- Disk Usage Alerts ---
+      - alert: StreamlineDiskUsageHigh
+        expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.8
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage above 80%"
+          description: "Storage on {{ $labels.instance }} is {{ $value | humanizePercentage }} full."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/disk-full"
+
+      - alert: StreamlineDiskUsageCritical
+        expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk usage above 95%"
+          description: "Storage on {{ $labels.instance }} is {{ $value | humanizePercentage }} full. Immediate action required."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/disk-full"
+
+      # --- Connection Alerts ---
+      - alert: StreamlineConnectionsNearLimit
+        expr: streamline_active_connections > 8000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Active connections approaching limit (>8000 of 10000)"
+          description: "{{ $value }} active connections on {{ $labels.instance }}."
+
+      # --- Health Alerts ---
+      - alert: StreamlineDown
+        expr: up{job="streamline"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Streamline server is down"
+          description: "{{ $labels.instance }} has been unreachable for more than 1 minute."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/node-failure"
+
+      # --- Throughput Alerts ---
+      - alert: StreamlineProduceThroughputDrop
+        expr: rate(streamline_messages_produced_total[5m]) < (rate(streamline_messages_produced_total[1h]) * 0.5)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Produce throughput dropped >50% from 1h average"
+          description: "Current rate: {{ $value | humanize }} msg/s on {{ $labels.instance }}."
+
+      # --- Memory Alerts ---
+      - alert: StreamlineHighMemoryUsage
+        expr: process_resident_memory_bytes{job="streamline"} > 4e9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Streamline using more than 4GB RSS memory"
+          description: "{{ $labels.instance }} is using {{ $value | humanize1024 }}B of memory."
+          runbook_url: "https://streamline.dev/docs/operations/runbooks/memory-exhaustion"
