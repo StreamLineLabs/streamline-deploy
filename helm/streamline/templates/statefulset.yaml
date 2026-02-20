@@ -61,6 +61,12 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.config.dataDir }}
+            - name: tmp
+              mountPath: /tmp
+          {{- else }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           {{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
@@ -82,6 +88,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
   {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
