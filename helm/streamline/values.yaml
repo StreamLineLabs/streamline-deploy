@@ -62,7 +62,7 @@ podSecurityContext:
 # Container security context
 securityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
   capabilities:
     drop:
       - ALL
@@ -120,7 +120,7 @@ metrics:
 
 # Network policy
 networkPolicy:
-  enabled: false
+  enabled: true
   ingress:
     - from:
         - podSelector: {}  # same namespace
