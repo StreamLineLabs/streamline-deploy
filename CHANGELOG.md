@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+- fix: adjust resource limits in production manifest (2026-02-22)
 - fix: correct volume mount paths in docker-compose (2026-02-22)
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
