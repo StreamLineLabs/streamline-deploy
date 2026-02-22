@@ -1,6 +1,7 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+- docs: add environment variable reference to compose file (2026-02-22)
 - chore: update base image tag in Dockerfile (2026-02-22)
 - fix: adjust resource limits in production manifest (2026-02-22)
 - fix: correct volume mount paths in docker-compose (2026-02-22)
