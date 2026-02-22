@@ -24,6 +24,7 @@ This starts Streamline with Prometheus scraping metrics from `:9094/metrics` and
 monitoring/
 ├── README.md                              # This file
 ├── docker-compose.monitoring.yml          # Prometheus + Grafana sidecar
+├── grafana-cluster-dashboard.json         # Cluster overview dashboard (16 panels)
 ├── prometheus/
 │   └── alerts.yml                         # Alerting rules
 └── grafana/

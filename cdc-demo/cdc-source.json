@@ -1,0 +1,15 @@
+{
+  "name": "demo-postgres",
+  "type": "postgres",
+  "config": {
+    "hostname": "postgres",
+    "port": 5432,
+    "database": "demo",
+    "username": "demo",
+    "password": "demo",
+    "publication": "streamline_pub",
+    "slot_name": "streamline_demo_slot",
+    "tables": ["public.orders", "public.customers"],
+    "topic_prefix": "cdc"
+  }
+}
