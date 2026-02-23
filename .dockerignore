@@ -1,0 +1,15 @@
+.git
+.github
+.gitattributes
+.pre-commit-config.yaml
+.editorconfig
+*.md
+!README.md
+LICENSE
+docs/
+tests/
+demos/
+monitoring/
+benchmark-results/
+k8s/
+helm/

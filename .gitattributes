@@ -1,0 +1,7 @@
+* text=auto
+*.yaml text
+*.yml text
+*.toml text
+*.sh text eol=lf
+*.md text diff=markdown
+Dockerfile text
