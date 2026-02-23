@@ -1,15 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-- docs: add environment variable reference to compose file (2026-02-22)
-- chore: update base image tag in Dockerfile (2026-02-22)
-- fix: adjust resource limits in production manifest (2026-02-22)
-- fix: correct volume mount paths in docker-compose (2026-02-22)
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Fixed
+- Adjust resource limits in production manifest
+- Correct volume mount paths in docker-compose
+
+### Changed
+- Update base image tag in Dockerfile
 
 ## [0.2.0] - 2026-02-18
 
