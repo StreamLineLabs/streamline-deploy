@@ -1,0 +1,36 @@
+# Node.js CI with Streamline TestContainers
+name: Node.js Integration Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - name: Run integration tests
+        run: npm test -- --filter integration
+
+      # Example test (vitest):
+      # import { StreamlineContainer } from '@streamline/testcontainers';
+      #
+      # let container: StartedStreamlineContainer;
+      #
+      # beforeAll(async () => {
+      #   container = await StreamlineContainer.forTesting();
+      # });
+      #
+      # afterAll(async () => {
+      #   await container.stop();
+      # });
+      #
+      # test('produce and consume', async () => {
+      #   const bootstrap = container.getBootstrapServers();
+      #   // Use kafkajs or any Kafka client unchanged
+      # });

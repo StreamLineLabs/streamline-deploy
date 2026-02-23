@@ -1,0 +1,31 @@
+# Java CI with Streamline TestContainers
+name: Java Integration Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run integration tests
+        run: mvn verify -pl testcontainers -Dtest=StreamlineContainerTest
+
+      # Example test class:
+      # @Testcontainers
+      # class MyIntegrationTest {
+      #     @Container
+      #     static StreamlineContainer streamline = StreamlineContainer.forTesting();
+      #
+      #     @Test
+      #     void testProduceConsume() {
+      #         String bootstrap = streamline.getBootstrapServers();
+      #         // Use any Kafka client library unchanged
+      #     }
+      # }

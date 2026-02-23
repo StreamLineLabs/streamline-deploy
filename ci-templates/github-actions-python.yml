@@ -1,0 +1,33 @@
+# Python CI with Streamline TestContainers
+name: Python Integration Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" streamline-testcontainers
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v
+
+      # Example conftest.py:
+      # import pytest
+      # from streamline_testcontainers import StreamlineContainer
+      #
+      # @pytest.fixture(scope="session")
+      # def streamline():
+      #     with StreamlineContainer.for_testing() as container:
+      #         yield container
+      #
+      # @pytest.fixture
+      # def bootstrap_servers(streamline):
+      #     return streamline.get_bootstrap_servers()
