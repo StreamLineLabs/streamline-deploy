@@ -1,0 +1,89 @@
+# Streamline Edge Appliance Configuration
+#
+# Optimized for resource-constrained edge devices (Raspberry Pi, IoT gateways).
+# See docs at https://streamlinelabs.dev/docs/operations/edge-deployment
+
+# --- Server ---
+[server]
+listen_addr = "0.0.0.0:9092"
+http_addr = "0.0.0.0:9094"
+log_level = "info"
+auto_create_topics = true
+
+# --- Storage (edge-optimized) ---
+[storage]
+# Use smaller segment sizes for constrained storage
+segment_bytes = 16777216          # 16 MB segments (vs 1 GB default)
+retention_ms = 86400000           # 24-hour retention (vs 7 days default)
+retention_bytes = 1073741824      # 1 GB max per topic
+max_topics = 100
+flush_interval_ms = 5000
+
+# Ring buffer mode: oldest messages evicted when storage limit reached
+ring_buffer_enabled = true
+
+# Compression: maximize compression for bandwidth-limited sync
+default_compression = "zstd"
+compression_level = 3
+
+# --- Edge Configuration ---
+[edge]
+enabled = true
+edge_id = "${STREAMLINE_EDGE_ID:-edge-default}"
+
+# Sync mode: auto (sync when connected), manual, scheduled
+sync_mode = "auto"
+
+# Cloud endpoint for edge-to-cloud synchronization
+cloud_endpoint = "${STREAMLINE_CLOUD_ENDPOINT:-}"
+
+# Sync settings
+sync_interval_secs = 30
+sync_batch_size = 1000
+sync_max_bandwidth_mbps = 10
+
+# Store-and-forward buffer for intermittent connectivity
+store_forward_enabled = true
+store_forward_max_bytes = 536870912     # 512 MB buffer
+store_forward_flush_interval_secs = 10
+
+# Conflict resolution: edge-wins, cloud-wins, timestamp-wins
+conflict_resolution = "timestamp-wins"
+
+# Bandwidth-aware compression: auto-selects codec based on connection speed
+adaptive_compression = true
+
+# --- MQTT Bridge ---
+[mqtt]
+enabled = true
+listen_addr = "0.0.0.0:1883"
+max_connections = 1000
+keep_alive_secs = 60
+max_packet_size = 65536           # 64 KB (suitable for IoT payloads)
+max_qos = 1                      # At-least-once delivery
+allow_anonymous = true
+retain_as_compacted = true
+
+# Topic mapping: MQTT topics are mapped to Streamline topics
+# sensors/temperature → sensors-temperature
+# devices/+/telemetry → devices-{device_id}-telemetry
+
+# --- Resource Limits (edge-optimized) ---
+[limits]
+max_connections = 500
+max_request_size = 1048576        # 1 MB
+connection_idle_timeout_secs = 300
+max_inflight_requests = 100
+
+# --- Runtime ---
+[runtime]
+# Use fewer threads on edge devices
+worker_threads = 2
+max_blocking_threads = 4
+
+# --- Telemetry (minimal for edge) ---
+[telemetry]
+# Lightweight metrics only
+metrics_enabled = true
+tracing_enabled = false           # Disable OTel tracing on edge
+metrics_interval_secs = 60

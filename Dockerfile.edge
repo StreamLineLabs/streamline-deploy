@@ -1,0 +1,89 @@
+# Streamline Edge Appliance Image
+# Optimized for ARM64/x86 IoT gateways and edge deployments.
+#
+# Features:
+# - Minimal footprint (<30MB image)
+# - MQTT bridge for IoT device ingestion
+# - Store-and-forward for intermittent connectivity
+# - Auto-sync to cloud Streamline cluster
+#
+# Build:
+#   docker build -f Dockerfile.edge -t streamline-edge:latest .
+#
+# Build for ARM64:
+#   docker buildx build --platform linux/arm64 -f Dockerfile.edge -t streamline-edge:arm64 .
+#
+# Run:
+#   docker run -d --name streamline-edge \
+#     -p 9092:9092 -p 9094:9094 -p 1883:1883 \
+#     -e STREAMLINE_EDGE_ID=edge-gateway-01 \
+#     -e STREAMLINE_CLOUD_ENDPOINT=wss://cloud.example.com:9092 \
+#     -v edge-data:/data \
+#     streamline-edge:latest
+
+# --- Build stage ---
+FROM rust:1.80-slim-bookworm AS builder
+
+ARG TARGETARCH
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY Cargo.toml Cargo.lock* ./
+COPY crates/ ./crates/
+COPY src/ ./src/
+
+# Build edge-optimized binary (lite features + edge)
+RUN cargo build --release --features "compression,edge" \
+    && strip target/release/streamline \
+    && strip target/release/streamline-cli
+
+# --- Runtime stage ---
+FROM debian:bookworm-20250224-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/streamline /usr/local/bin/
+COPY --from=builder /app/target/release/streamline-cli /usr/local/bin/
+
+# Create non-root user
+RUN groupadd -r streamline && useradd -r -g streamline -u 1000 streamline \
+    && mkdir -p /data /config && chown -R streamline:streamline /data /config
+
+# Copy default edge config
+COPY docker/edge/streamline-edge.toml /config/streamline.toml
+
+# Environment
+ENV STREAMLINE_DATA_DIR=/data \
+    STREAMLINE_CONFIG=/config/streamline.toml \
+    STREAMLINE_LISTEN_ADDR=0.0.0.0:9092 \
+    STREAMLINE_HTTP_ADDR=0.0.0.0:9094 \
+    STREAMLINE_LOG_LEVEL=info \
+    STREAMLINE_EDGE_MODE=true \
+    RUST_LOG=info
+
+# Ports: Kafka(9092) + HTTP(9094) + MQTT(1883)
+EXPOSE 9092 9094 1883
+
+VOLUME ["/data"]
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=3s --retries=3 \
+    CMD curl -sf http://localhost:9094/health || exit 1
+
+USER 1000:1000
+
+ENTRYPOINT ["streamline"]
+CMD ["--config", "/config/streamline.toml"]
+
+LABEL org.opencontainers.image.title="Streamline Edge" \
+      org.opencontainers.image.description="Edge-optimized streaming platform with MQTT bridge" \
+      org.opencontainers.image.vendor="StreamlineLabs" \
+      org.opencontainers.image.source="https://github.com/streamlinelabs/streamline-deploy"

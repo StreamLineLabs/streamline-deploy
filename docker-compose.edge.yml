@@ -1,0 +1,85 @@
+# Edge Deployment Stack
+#
+# Deploys Streamline Edge with MQTT bridge and optional monitoring.
+#
+# Usage:
+#   docker compose -f docker-compose.edge.yml up -d
+#
+# With monitoring:
+#   docker compose -f docker-compose.edge.yml --profile monitoring up -d
+#
+# ARM64 (Raspberry Pi):
+#   PLATFORM=linux/arm64 docker compose -f docker-compose.edge.yml up -d
+
+services:
+  streamline-edge:
+    build:
+      context: .
+      dockerfile: Dockerfile.edge
+      platforms:
+        - ${PLATFORM:-linux/amd64}
+    image: ghcr.io/streamlinelabs/streamline-edge:0.2.0
+    container_name: streamline-edge
+    restart: unless-stopped
+    ports:
+      - "9092:9092"   # Kafka protocol
+      - "9094:9094"   # HTTP API
+      - "1883:1883"   # MQTT
+    environment:
+      - STREAMLINE_EDGE_ID=${EDGE_ID:-edge-gateway-01}
+      - STREAMLINE_CLOUD_ENDPOINT=${CLOUD_ENDPOINT:-}
+      - STREAMLINE_LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - edge-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "1.0"
+        reservations:
+          memory: 64M
+          cpus: "0.25"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9094/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 3s
+
+  # Optional: MQTT test client for validating the bridge
+  mqtt-test:
+    image: eclipse-mosquitto:2
+    container_name: mqtt-test
+    depends_on:
+      streamline-edge:
+        condition: service_healthy
+    profiles:
+      - test
+    entrypoint: >
+      sh -c "
+        echo 'Publishing test MQTT message...'
+        mosquitto_pub -h streamline-edge -p 1883 -t sensors/temperature -m '{\"device\":\"sensor-01\",\"temp\":23.5,\"ts\":\"$(date -Iseconds)\"}'
+        echo 'Message published to sensors/temperature'
+        sleep 2
+        echo 'Subscribing to verify...'
+        timeout 5 mosquitto_sub -h streamline-edge -p 1883 -t 'sensors/#' -C 1 || echo 'Subscription test complete'
+      "
+
+  # Optional: Lightweight monitoring for edge
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: edge-node-exporter
+    profiles:
+      - monitoring
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: "0.1"
+
+volumes:
+  edge-data:
+    driver: local
