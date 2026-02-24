@@ -11,7 +11,7 @@ Helm chart for deploying Streamline on Kubernetes.
 
 ```bash
 # Add the chart repository (if hosted)
-# helm repo add streamline https://charts.example.com
+# helm repo add streamline https://streamlinelabs.github.io/charts
 
 # Install with default values
 helm install streamline ./streamline

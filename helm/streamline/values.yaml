@@ -4,8 +4,8 @@
 replicaCount: 1
 
 image:
-  repository: streamline
-  tag: latest
+  repository: ghcr.io/streamlinelabs/streamline
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -102,7 +102,16 @@ nodeSelector: {}
 tolerations: []
 
 # Affinity rules
-affinity: {}
+# Default: soft pod anti-affinity to spread replicas across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: streamline
+          topologyKey: kubernetes.io/hostname
 
 # Pod disruption budget
 podDisruptionBudget:
