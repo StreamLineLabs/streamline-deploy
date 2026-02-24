@@ -1,0 +1,139 @@
+# Jepsen-style Correctness Testing for Streamline
+#
+# This docker-compose file sets up a 3-node Streamline cluster with a
+# Jepsen control node for running correctness tests under adversarial
+# conditions (network partitions, process crashes, clock skew).
+#
+# Usage:
+#   docker compose -f docker-compose.jepsen.yml up -d
+#   docker compose -f docker-compose.jepsen.yml exec jepsen-control ./run-tests.sh
+#   docker compose -f docker-compose.jepsen.yml down -v
+#
+# The control node runs the test workloads and injects faults via
+# `tc` (traffic control) and `kill` commands on the Streamline nodes.
+
+services:
+  # ── Streamline Cluster (3 nodes) ────────────────────────────────────────────
+
+  streamline-n1:
+    image: ghcr.io/streamlinelabs/streamline:latest
+    container_name: streamline-n1
+    hostname: streamline-n1
+    environment:
+      STREAMLINE_LISTEN_ADDR: "0.0.0.0:9092"
+      STREAMLINE_HTTP_ADDR: "0.0.0.0:9094"
+      STREAMLINE_NODE_ID: "1"
+      STREAMLINE_CLUSTER_ENABLED: "true"
+      STREAMLINE_SEED_NODES: "streamline-n1:9093,streamline-n2:9093,streamline-n3:9093"
+      STREAMLINE_INTER_BROKER_ADDR: "streamline-n1:9093"
+      STREAMLINE_DATA_DIR: "/data"
+      STREAMLINE_LOG_LEVEL: "info"
+      STREAMLINE_IN_MEMORY: "false"
+    volumes:
+      - n1-data:/data
+    networks:
+      jepsen-net:
+        ipv4_address: 172.28.0.11
+    cap_add:
+      - NET_ADMIN  # Required for tc (traffic control) fault injection
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  streamline-n2:
+    image: ghcr.io/streamlinelabs/streamline:latest
+    container_name: streamline-n2
+    hostname: streamline-n2
+    environment:
+      STREAMLINE_LISTEN_ADDR: "0.0.0.0:9092"
+      STREAMLINE_HTTP_ADDR: "0.0.0.0:9094"
+      STREAMLINE_NODE_ID: "2"
+      STREAMLINE_CLUSTER_ENABLED: "true"
+      STREAMLINE_SEED_NODES: "streamline-n1:9093,streamline-n2:9093,streamline-n3:9093"
+      STREAMLINE_INTER_BROKER_ADDR: "streamline-n2:9093"
+      STREAMLINE_DATA_DIR: "/data"
+      STREAMLINE_LOG_LEVEL: "info"
+      STREAMLINE_IN_MEMORY: "false"
+    volumes:
+      - n2-data:/data
+    networks:
+      jepsen-net:
+        ipv4_address: 172.28.0.12
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  streamline-n3:
+    image: ghcr.io/streamlinelabs/streamline:latest
+    container_name: streamline-n3
+    hostname: streamline-n3
+    environment:
+      STREAMLINE_LISTEN_ADDR: "0.0.0.0:9092"
+      STREAMLINE_HTTP_ADDR: "0.0.0.0:9094"
+      STREAMLINE_NODE_ID: "3"
+      STREAMLINE_CLUSTER_ENABLED: "true"
+      STREAMLINE_SEED_NODES: "streamline-n1:9093,streamline-n2:9093,streamline-n3:9093"
+      STREAMLINE_INTER_BROKER_ADDR: "streamline-n3:9093"
+      STREAMLINE_DATA_DIR: "/data"
+      STREAMLINE_LOG_LEVEL: "info"
+      STREAMLINE_IN_MEMORY: "false"
+    volumes:
+      - n3-data:/data
+    networks:
+      jepsen-net:
+        ipv4_address: 172.28.0.13
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Jepsen Control Node ─────────────────────────────────────────────────────
+
+  jepsen-control:
+    image: python:3.12-slim
+    container_name: jepsen-control
+    hostname: jepsen-control
+    depends_on:
+      streamline-n1:
+        condition: service_healthy
+      streamline-n2:
+        condition: service_healthy
+      streamline-n3:
+        condition: service_healthy
+    environment:
+      NODES: "streamline-n1:9092,streamline-n2:9092,streamline-n3:9092"
+      NODE_IPS: "172.28.0.11,172.28.0.12,172.28.0.13"
+      TEST_DURATION_SECS: "120"
+      NEMESIS_INTERVAL_SECS: "15"
+    volumes:
+      - ./jepsen:/jepsen
+      - jepsen-results:/results
+    working_dir: /jepsen
+    entrypoint: ["python3", "-u", "run_jepsen.py"]
+    networks:
+      jepsen-net:
+        ipv4_address: 172.28.0.100
+    cap_add:
+      - NET_ADMIN
+
+volumes:
+  n1-data:
+  n2-data:
+  n3-data:
+  jepsen-results:
+
+networks:
+  jepsen-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
