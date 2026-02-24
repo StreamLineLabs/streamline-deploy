@@ -1,0 +1,78 @@
+# CDC → Streamline → Lakehouse Pipeline Demo
+#
+# Demonstrates a full data pipeline:
+#   PostgreSQL → CDC → Streamline → (consume with StreamQL)
+#
+# Usage:
+#   docker compose -f docker-compose.cdc-demo.yml up -d
+#   # Wait for services to be ready (~15 seconds)
+#   # Then seed the database and start CDC:
+#   docker compose -f docker-compose.cdc-demo.yml exec postgres psql -U demo -d demo -f /docker-entrypoint-initdb.d/seed.sql
+#   curl -X POST http://localhost:9094/api/v1/cdc/sources -H 'Content-Type: application/json' -d @cdc-source.json
+#   curl -X POST http://localhost:9094/api/v1/cdc/sources/demo-postgres/start
+#
+# View messages:
+#   curl 'http://localhost:9094/api/v1/topics/cdc.public.orders/partitions/0/messages?offset=0&limit=10'
+#
+# Query with StreamQL:
+#   curl -X POST http://localhost:9094/sql -H 'Content-Type: application/json' \
+#     -d '{"ksql": "SELECT * FROM \"cdc.public.orders\" LIMIT 10;"}'
+
+services:
+  # PostgreSQL source database
+  postgres:
+    image: postgres:16-alpine
+    container_name: cdc-demo-postgres
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    ports:
+      - "5432:5432"
+    command: >
+      postgres
+        -c wal_level=logical
+        -c max_replication_slots=4
+        -c max_wal_senders=4
+    volumes:
+      - ./cdc-demo/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./cdc-demo/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Streamline streaming platform
+  streamline:
+    image: ghcr.io/streamlinelabs/streamline:0.2.0
+    container_name: cdc-demo-streamline
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      - STREAMLINE_LOG_LEVEL=info
+      - STREAMLINE_FEATURES=cdc,analytics
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9094/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Grafana for monitoring
+  grafana:
+    image: grafana/grafana:11-alpine
+    container_name: cdc-demo-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:

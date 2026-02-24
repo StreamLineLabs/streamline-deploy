@@ -1,0 +1,61 @@
+# Streamline NetworkPolicy
+# Restricts traffic to only what's needed for Streamline server operation.
+# Apply with: kubectl apply -f networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: streamline
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: server
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: streamline
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Kafka protocol (clients in same namespace)
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 9092
+          protocol: TCP
+    # HTTP API (health, metrics, management — same namespace)
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 9094
+          protocol: TCP
+    # Inter-broker replication (clustering)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: streamline
+              app.kubernetes.io/component: server
+      ports:
+        - port: 9093
+          protocol: TCP
+  egress:
+    # DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Inter-broker replication (clustering)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: streamline
+              app.kubernetes.io/component: server
+      ports:
+        - port: 9093
+          protocol: TCP
+    # Cloud storage tiering (S3/GCS/Azure) — HTTPS
+    - ports:
+        - port: 443
+          protocol: TCP

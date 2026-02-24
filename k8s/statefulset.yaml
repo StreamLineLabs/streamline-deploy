@@ -32,7 +32,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: streamline
-          image: streamline:latest
+          image: ghcr.io/streamlinelabs/streamline:0.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: kafka
@@ -96,7 +96,7 @@ spec:
             failureThreshold: 30
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
