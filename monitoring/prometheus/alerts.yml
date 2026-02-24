@@ -108,3 +108,42 @@ groups:
           summary: "Streamline using more than 4GB RSS memory"
           description: "{{ $labels.instance }} is using {{ $value | humanize1024 }}B of memory."
           runbook_url: "https://streamline.dev/docs/operations/runbooks/memory-exhaustion"
+
+      # --- Partition Skew Alerts ---
+      - alert: StreamlinePartitionSkew
+        expr: (max by (topic) (streamline_log_size_bytes) / avg by (topic) (streamline_log_size_bytes)) > 3
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Partition skew detected (largest partition >3x average)"
+          description: "Topic {{ $labels.topic }} has uneven partition sizes. Consider rebalancing or adjusting partition keys."
+
+      # --- Replication Alerts (Clustering) ---
+      - alert: StreamlineUnderReplicatedPartitions
+        expr: streamline_under_replicated_partitions > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Under-replicated partitions detected"
+          description: "{{ $value }} partitions on {{ $labels.instance }} are under-replicated."
+
+      - alert: StreamlineReplicationLagHigh
+        expr: streamline_multidc_replication_lag_ms > 30000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Replication lag exceeds 30 seconds"
+          description: "Replica on {{ $labels.instance }} has {{ $value }}ms replication lag."
+
+      # --- Transaction Alerts ---
+      - alert: StreamlineTransactionTimeoutsHigh
+        expr: rate(streamline_transaction_timeouts_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated transaction timeout rate"
+          description: "{{ $value | humanize }} transaction timeouts/sec on {{ $labels.instance }}."
