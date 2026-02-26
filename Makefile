@@ -33,3 +33,4 @@ up: ## Start Streamline via Docker Compose
 
 down: ## Stop Streamline
 	docker compose down
+# bump base image to latest Alpine
