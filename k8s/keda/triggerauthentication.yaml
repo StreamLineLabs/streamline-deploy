@@ -1,0 +1,10 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: streamline-keda-auth
+  namespace: streamline
+spec:
+  secretTargetRef:
+    - parameter: bearerToken
+      name: streamline-metrics-token
+      key: token

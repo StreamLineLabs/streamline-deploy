@@ -1,0 +1,42 @@
+# Multi-stage build for minimal production image
+FROM rust:1.80-slim-bookworm AS builder
+
+WORKDIR /build
+COPY streamline/ ./
+
+# Build release binary with full features
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && \
+    cargo build --release --features full && \
+    strip target/release/streamline
+
+# Minimal runtime image
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd -r -s /bin/false streamline && \
+    mkdir -p /data && chown streamline:streamline /data
+
+COPY --from=builder /build/target/release/streamline /usr/local/bin/streamline
+COPY --from=builder /build/target/release/streamline-cli /usr/local/bin/streamline-cli 2>/dev/null || true
+
+USER streamline
+WORKDIR /data
+
+EXPOSE 9092 9094
+
+VOLUME ["/data"]
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:9094/health || exit 1
+
+LABEL org.opencontainers.image.title="Streamline" \
+      org.opencontainers.image.description="The Redis of Streaming - Kafka-compatible single-binary streaming platform" \
+      org.opencontainers.image.vendor="StreamlineLabs" \
+      org.opencontainers.image.version="0.2.0" \
+      org.opencontainers.image.source="https://github.com/streamlinelabs/streamline" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+ENTRYPOINT ["streamline"]
+CMD ["--data-dir", "/data", "--listen-addr", "0.0.0.0:9092", "--http-addr", "0.0.0.0:9094"]

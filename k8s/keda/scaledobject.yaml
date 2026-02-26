@@ -1,0 +1,45 @@
+# KEDA ScaledObject for Streamline auto-scaling
+# Enables event-driven scaling based on Streamline metrics
+# Requires KEDA v2.x installed in the cluster
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: streamline-scaledobject
+  namespace: streamline
+  labels:
+    app.kubernetes.io/name: streamline
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/managed-by: keda
+spec:
+  scaleTargetRef:
+    name: streamline
+    kind: StatefulSet
+  pollingInterval: 15
+  cooldownPeriod: 300
+  idleReplicaCount: 0         # Scale to zero when idle
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring:9090
+        metricName: streamline_messages_per_second
+        query: sum(rate(streamline_messages_total[1m]))
+        threshold: "100000"
+        activationThreshold: "10"
+    - type: prometheus  
+      metadata:
+        serverAddress: http://prometheus.monitoring:9090
+        metricName: streamline_consumer_lag
+        query: sum(streamline_consumer_lag_total)
+        threshold: "50000"
+        activationThreshold: "100"
+    - type: metrics-api
+      metadata:
+        targetValue: "100000"
+        activationTargetValue: "10"
+        url: "http://streamline.streamline:9094/scaling/metrics"
+        valueLocation: "messages_per_second"

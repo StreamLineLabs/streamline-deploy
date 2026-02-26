@@ -1,0 +1,21 @@
+{{- if .Values.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "streamline.fullname" . }}-keda
+  labels:
+    {{- include "streamline.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "streamline.fullname" . }}
+    kind: StatefulSet
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+  idleReplicaCount: {{ .Values.keda.idleReplicaCount }}
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+  {{- if .Values.keda.triggers }}
+  triggers:
+    {{- toYaml .Values.keda.triggers | nindent 4 }}
+  {{- end }}
+{{- end }}

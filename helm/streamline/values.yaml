@@ -153,3 +153,18 @@ autoscaling:
 
 # Graceful shutdown
 terminationGracePeriodSeconds: 30
+
+# KEDA Auto-Scaling Configuration
+keda:
+  enabled: false
+  pollingInterval: 15
+  cooldownPeriod: 300
+  idleReplicaCount: 0
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: metrics-api
+      metadata:
+        targetValue: "100000"
+        url: "http://{{ include \"streamline.fullname\" . }}:9094/scaling/metrics"
+        valueLocation: "messages_per_second"
