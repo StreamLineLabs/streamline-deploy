@@ -66,3 +66,4 @@ jobs:
           for f in docker-compose*.yml; do
             docker compose -f "$f" config --quiet && echo "✅ $f" || echo "❌ $f"
           done
+
