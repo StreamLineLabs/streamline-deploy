@@ -22,7 +22,7 @@
 #     streamline-edge:latest
 
 # --- Build stage ---
-FROM rust:1.80-slim-bookworm AS builder
+FROM rust:1.93-slim-bookworm AS builder
 
 ARG TARGETARCH
 WORKDIR /app
@@ -41,7 +41,7 @@ RUN cargo build --release --features "compression,edge" \
     && strip target/release/streamline-cli
 
 # --- Runtime stage ---
-FROM debian:bookworm-20250224-slim
+FROM debian:bookworm-20260223-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
