@@ -178,4 +178,3 @@ The chart runs with security best practices out of the box:
 ## License
 
 Apache-2.0
-
