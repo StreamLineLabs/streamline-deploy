@@ -1,0 +1,11 @@
+# Conformance test users
+users:
+  - username: admin
+    password: admin-secret
+    roles: [superuser]
+  - username: alice
+    password: alice-secret
+    roles: [read-write]
+  - username: bob
+    password: bob-secret
+    roles: [read-only]

@@ -1,0 +1,27 @@
+# Conformance Test Server Configuration
+
+[server]
+listen_addr = "0.0.0.0:9092"
+http_addr = "0.0.0.0:9094"
+
+[auth]
+enabled = true
+sasl_mechanisms = ["PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"]
+users_file = "/etc/streamline/config/users.yaml"
+
+[acl]
+enabled = true
+super_users = ["admin"]
+
+[tls]
+enabled = true
+cert_file = "/etc/streamline/certs/server.crt"
+key_file = "/etc/streamline/certs/server.key"
+ca_file = "/etc/streamline/certs/ca.crt"
+listen_addr = "0.0.0.0:9192"
+
+[schema_registry]
+enabled = true
+
+[storage]
+data_dir = "/data"

@@ -1,0 +1,21 @@
+# Local playground for development
+version: "3.8"
+services:
+  streamline:
+    image: ghcr.io/streamlinelabs/streamline:0.2.0
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    command: >
+      streamline
+        --playground
+        --in-memory
+        --listen-addr 0.0.0.0:9092
+        --http-addr 0.0.0.0:9094
+    environment:
+      STREAMLINE_LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

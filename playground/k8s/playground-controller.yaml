@@ -1,0 +1,110 @@
+# Playground Controller - Manages ephemeral Streamline instances
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playground-controller
+  namespace: streamline-playground
+  labels:
+    app: playground-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: playground-controller
+  template:
+    metadata:
+      labels:
+        app: playground-controller
+    spec:
+      serviceAccountName: playground-controller
+      containers:
+        - name: controller
+          image: ghcr.io/streamlinelabs/playground-controller:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: MAX_INSTANCES
+              value: "100"
+            - name: INSTANCE_TTL_MINUTES
+              value: "30"
+            - name: STREAMLINE_IMAGE
+              value: "ghcr.io/streamlinelabs/streamline:0.2.0"
+            - name: INSTANCE_MEMORY_LIMIT
+              value: "256Mi"
+            - name: INSTANCE_CPU_LIMIT
+              value: "500m"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: playground-controller
+  namespace: streamline-playground
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: playground-controller
+  namespace: streamline-playground
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: playground-controller
+  namespace: streamline-playground
+subjects:
+  - kind: ServiceAccount
+    name: playground-controller
+roleRef:
+  kind: Role
+  name: playground-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: playground-controller
+  namespace: streamline-playground
+spec:
+  selector:
+    app: playground-controller
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: playground-isolation
+  namespace: streamline-playground
+spec:
+  podSelector:
+    matchLabels:
+      app: playground-instance
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: playground-controller
+      ports:
+        - port: 9092
+        - port: 9094
+  egress: []  # No outbound from playground instances

@@ -1,0 +1,32 @@
+# SDK Conformance Test Infrastructure
+# Pre-configured Streamline server with all features for SDK testing
+version: "3.8"
+
+services:
+  streamline-conformance:
+    image: ghcr.io/streamlinelabs/streamline:0.2.0
+    container_name: streamline-conformance
+    ports:
+      - "19092:9092"    # Kafka protocol
+      - "19094:9094"    # HTTP API
+      - "19192:9192"    # TLS Kafka protocol
+    volumes:
+      - ./conformance/certs:/etc/streamline/certs:ro
+      - ./conformance/config:/etc/streamline/config:ro
+    command: >
+      streamline
+        --config /etc/streamline/config/conformance.toml
+        --listen-addr 0.0.0.0:9092
+        --http-addr 0.0.0.0:9094
+        --data-dir /data
+        --log-level debug
+    environment:
+      STREAMLINE_AUTH_ENABLED: "true"
+      STREAMLINE_AUTH_USERS_FILE: /etc/streamline/config/users.yaml
+      STREAMLINE_ACL_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
