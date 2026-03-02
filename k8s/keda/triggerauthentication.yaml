@@ -8,3 +8,4 @@ spec:
     - parameter: bearerToken
       name: streamline-metrics-token
       key: token
+
