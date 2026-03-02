@@ -34,3 +34,4 @@ client = StreamlineClient("localhost:9092")
 # Schema validation happens automatically when producing
 await client.produce("user-events", {"user_id": "alice", "action": "login"})
 ```
+
