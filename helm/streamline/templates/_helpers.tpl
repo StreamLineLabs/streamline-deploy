@@ -54,3 +54,14 @@ Create the name of the headless service
 {{- define "streamline.headlessServiceName" -}}
 {{- printf "%s-headless" (include "streamline.fullname" .) }}
 {{- end }}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "streamline.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "streamline.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
