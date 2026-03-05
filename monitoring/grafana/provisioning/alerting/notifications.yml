@@ -1,0 +1,24 @@
+# Grafana Alerting Provisioning — Notification Policies & Contact Points
+#
+# Configures default notification routing for Streamline alerts.
+# Customize contact_points to add email, Slack, PagerDuty, etc.
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: streamline-default
+    receivers:
+      - uid: streamline-log
+        type: log
+        settings: {}
+
+policies:
+  - orgId: 1
+    receiver: streamline-default
+    group_by:
+      - grafana_folder
+      - alertname
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

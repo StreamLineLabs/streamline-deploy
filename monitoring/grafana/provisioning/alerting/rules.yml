@@ -1,0 +1,216 @@
+# Grafana Alert Rules — Streamline Monitoring
+#
+# These mirror the Prometheus alerting rules but run natively in Grafana.
+# They query the Prometheus datasource and evaluate conditions in Grafana.
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Streamline Alerts
+    folder: Streamline
+    interval: 60s
+    rules:
+      # ── Server Health ────────────────────────────────────────────────
+      - uid: streamline-down
+        title: Streamline Down
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: up{job="streamline"} == 0
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Streamline server is unreachable
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/node-failure
+
+      # ── Latency ──────────────────────────────────────────────────────
+      - uid: streamline-high-produce-latency
+        title: High Produce Latency (p99 > 100ms)
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: histogram_quantile(0.99, rate(streamline_produce_latency_seconds_bucket[5m])) > 0.1
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Produce p99 latency exceeds 100ms
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/high-latency
+
+      - uid: streamline-high-fetch-latency
+        title: High Fetch Latency (p99 > 200ms)
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: histogram_quantile(0.99, rate(streamline_fetch_latency_seconds_bucket[5m])) > 0.2
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Fetch p99 latency exceeds 200ms
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/high-latency
+
+      # ── Consumer Lag ─────────────────────────────────────────────────
+      - uid: streamline-consumer-lag-high
+        title: Consumer Group Lag > 10K
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: streamline_consumer_group_lag > 10000
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Consumer group lag exceeds 10,000 messages
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/consumer-lag
+
+      - uid: streamline-consumer-lag-critical
+        title: Consumer Group Lag > 100K
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: streamline_consumer_group_lag > 100000
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Consumer group lag exceeds 100,000 messages — critical backlog
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/consumer-lag
+
+      # ── Disk Usage ───────────────────────────────────────────────────
+      - uid: streamline-disk-high
+        title: Disk Usage > 80%
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.8
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Storage usage above 80%
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/disk-full
+
+      - uid: streamline-disk-critical
+        title: Disk Usage > 95%
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.95
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Storage usage above 95% — immediate action required
+          runbook_url: https://streamlinelabs.dev/docs/operations/runbooks/disk-full
+
+      # ── Throughput ───────────────────────────────────────────────────
+      - uid: streamline-throughput-drop
+        title: Produce Throughput Dropped > 50%
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(streamline_messages_produced_total[5m]) < (rate(streamline_messages_produced_total[1h]) * 0.5)
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Produce throughput dropped more than 50% from 1h average
+
+      # ── Memory ───────────────────────────────────────────────────────
+      - uid: streamline-high-memory
+        title: High Memory Usage (> 4GB RSS)
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: process_resident_memory_bytes{job="streamline"} > 4e9
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Streamline using more than 4GB resident memory
+
+      # ── Replication ──────────────────────────────────────────────────
+      - uid: streamline-under-replicated
+        title: Under-Replicated Partitions
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: streamline_under_replicated_partitions > 0
+              intervalMs: 15000
+              maxDataPoints: 43200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: One or more partitions are under-replicated
