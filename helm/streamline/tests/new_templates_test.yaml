@@ -1,0 +1,317 @@
+suite: Streamline new templates (ServiceAccount, Ingress, Secret, PrometheusRule)
+templates:
+  - serviceaccount.yaml
+  - ingress.yaml
+  - secret.yaml
+  - prometheusrule.yaml
+
+# ==============================================================================
+# ServiceAccount Tests
+# ==============================================================================
+
+tests:
+  - it: should create a ServiceAccount by default
+    template: serviceaccount.yaml
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+
+  - it: should use custom ServiceAccount name
+    template: serviceaccount.yaml
+    set:
+      serviceAccount.name: my-custom-sa
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-custom-sa
+
+  - it: should include annotations
+    template: serviceaccount.yaml
+    set:
+      serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/streamline
+    asserts:
+      - equal:
+          path: metadata.annotations.eks\.amazonaws\.com/role-arn
+          value: "arn:aws:iam::123456789:role/streamline"
+
+  - it: should not create ServiceAccount when disabled
+    template: serviceaccount.yaml
+    set:
+      serviceAccount.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should enable automountToken when set
+    template: serviceaccount.yaml
+    set:
+      serviceAccount.automountToken: true
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: true
+
+# ==============================================================================
+# Ingress Tests
+# ==============================================================================
+
+  - it: should not create Ingress by default
+    template: ingress.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create Ingress when enabled
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: streamline.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+              servicePort: 9094
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline
+
+  - it: should set ingressClassName
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.className: nginx
+      ingress.hosts:
+        - host: streamline.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: should configure TLS
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: streamline.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      ingress.tls:
+        - secretName: streamline-tls
+          hosts:
+            - streamline.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: streamline-tls
+      - contains:
+          path: spec.tls[0].hosts
+          content: streamline.example.com
+
+  - it: should include annotations
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+        cert-manager.io/cluster-issuer: letsencrypt
+      ingress.hosts:
+        - host: streamline.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: metadata.annotations.nginx\.ingress\.kubernetes\.io/proxy-body-size
+          value: "10m"
+      - equal:
+          path: metadata.annotations.cert-manager\.io/cluster-issuer
+          value: letsencrypt
+
+  - it: should set correct backend service port
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: streamline.example.com
+          paths:
+            - path: /api
+              pathType: Prefix
+              servicePort: 9094
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 9094
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /api
+
+  - it: should support multiple hosts
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.hosts:
+        - host: api.streamline.io
+          paths:
+            - path: /
+              pathType: Prefix
+        - host: admin.streamline.io
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: api.streamline.io
+      - equal:
+          path: spec.rules[1].host
+          value: admin.streamline.io
+
+# ==============================================================================
+# Secret Tests
+# ==============================================================================
+
+  - it: should not create auth Secret by default
+    template: secret.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create auth Secret when auth is enabled
+    template: secret.yaml
+    set:
+      auth.enabled: true
+      auth.sasl.username: admin
+      auth.sasl.password: secret123
+    asserts:
+      - isKind:
+          of: Secret
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-auth
+        documentIndex: 0
+      - equal:
+          path: type
+          value: Opaque
+        documentIndex: 0
+
+  - it: should create TLS Secret when TLS is enabled
+    template: secret.yaml
+    set:
+      tls.enabled: true
+      tls.certData: LS0tLS1CRUdJTg==
+      tls.keyData: LS0tLS1CRUdJTg==
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: type
+          value: kubernetes.io/tls
+
+  - it: should create both Secrets when auth and TLS enabled
+    template: secret.yaml
+    set:
+      auth.enabled: true
+      auth.sasl.username: admin
+      auth.sasl.password: pass
+      tls.enabled: true
+      tls.certData: cert
+      tls.keyData: key
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should include extra secrets
+    template: secret.yaml
+    set:
+      auth.enabled: true
+      auth.sasl.username: admin
+      auth.sasl.password: pass
+      auth.extraSecrets:
+        oauth-client-id: my-client
+        oauth-client-secret: my-secret
+    asserts:
+      - isKind:
+          of: Secret
+        documentIndex: 0
+
+  - it: should include CA cert in TLS Secret
+    template: secret.yaml
+    set:
+      tls.enabled: true
+      tls.certData: Y2VydA==
+      tls.keyData: a2V5
+      tls.caData: Y2E=
+    asserts:
+      - exists:
+          path: data["ca.crt"]
+
+# ==============================================================================
+# PrometheusRule Tests
+# ==============================================================================
+
+  - it: should not create PrometheusRule by default
+    template: prometheusrule.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create PrometheusRule when enabled
+    template: prometheusrule.yaml
+    set:
+      metrics.enabled: true
+      metrics.prometheusRule.enabled: true
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline
+
+  - it: should include custom labels on PrometheusRule
+    template: prometheusrule.yaml
+    set:
+      metrics.enabled: true
+      metrics.prometheusRule.enabled: true
+      metrics.prometheusRule.labels:
+        prometheus: kube-prometheus
+        role: alert-rules
+    asserts:
+      - equal:
+          path: metadata.labels.prometheus
+          value: kube-prometheus
+      - equal:
+          path: metadata.labels.role
+          value: alert-rules
+
+  - it: should have all alert groups
+    template: prometheusrule.yaml
+    set:
+      metrics.enabled: true
+      metrics.prometheusRule.enabled: true
+    asserts:
+      - isNotEmpty:
+          path: spec.groups
+
+  - it: should not create PrometheusRule when metrics disabled
+    template: prometheusrule.yaml
+    set:
+      metrics.enabled: false
+      metrics.prometheusRule.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0

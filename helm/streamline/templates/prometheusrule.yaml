@@ -1,0 +1,128 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "streamline.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "streamline.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: streamline.latency
+      rules:
+        - alert: StreamlineHighProduceLatency
+          expr: histogram_quantile(0.99, rate(streamline_produce_latency_seconds_bucket[5m])) > {{ .Values.metrics.prometheusRule.thresholds.produceLatencyWarning | default 0.1 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High produce latency (p99 > {{ .Values.metrics.prometheusRule.thresholds.produceLatencyWarning | default 0.1 }}s)"
+            description: "Produce p99 latency is {{`{{ $value | humanizeDuration }}`}} on {{`{{ $labels.instance }}`}}."
+
+        - alert: StreamlineHighFetchLatency
+          expr: histogram_quantile(0.99, rate(streamline_fetch_latency_seconds_bucket[5m])) > {{ .Values.metrics.prometheusRule.thresholds.fetchLatencyWarning | default 0.2 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High fetch latency (p99 > {{ .Values.metrics.prometheusRule.thresholds.fetchLatencyWarning | default 0.2 }}s)"
+            description: "Fetch p99 latency is {{`{{ $value | humanizeDuration }}`}} on {{`{{ $labels.instance }}`}}."
+
+    - name: streamline.consumer-lag
+      rules:
+        - alert: StreamlineConsumerLagHigh
+          expr: streamline_consumer_group_lag > {{ .Values.metrics.prometheusRule.thresholds.consumerLagWarning | default 10000 }}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Consumer group lag exceeds {{ .Values.metrics.prometheusRule.thresholds.consumerLagWarning | default 10000 }} messages"
+            description: "Group {{`{{ $labels.group }}`}} on topic {{`{{ $labels.topic }}`}} has lag of {{`{{ $value }}`}}."
+
+        - alert: StreamlineConsumerLagCritical
+          expr: streamline_consumer_group_lag > {{ .Values.metrics.prometheusRule.thresholds.consumerLagCritical | default 100000 }}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Consumer group lag exceeds {{ .Values.metrics.prometheusRule.thresholds.consumerLagCritical | default 100000 }} messages"
+            description: "Group {{`{{ $labels.group }}`}} on topic {{`{{ $labels.topic }}`}} has critical lag of {{`{{ $value }}`}}."
+
+    - name: streamline.storage
+      rules:
+        - alert: StreamlineDiskUsageHigh
+          expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.8
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Disk usage above 80%"
+            description: "Storage on {{`{{ $labels.instance }}`}} is {{`{{ $value | humanizePercentage }}`}} full."
+
+        - alert: StreamlineDiskUsageCritical
+          expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Disk usage above 95%"
+            description: "Storage on {{`{{ $labels.instance }}`}} is {{`{{ $value | humanizePercentage }}`}} full. Immediate action required."
+
+    - name: streamline.health
+      rules:
+        - alert: StreamlineDown
+          expr: up{job="streamline"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Streamline server is down"
+            description: "{{`{{ $labels.instance }}`}} has been unreachable for more than 1 minute."
+
+        - alert: StreamlineHighMemoryUsage
+          expr: process_resident_memory_bytes{job="streamline"} > 4e9
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Streamline using more than 4GB RSS memory"
+            description: "{{`{{ $labels.instance }}`}} is using {{`{{ $value | humanize1024 }}`}}B of memory."
+
+    - name: streamline.connections
+      rules:
+        - alert: StreamlineConnectionsNearLimit
+          expr: streamline_active_connections > 8000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Active connections approaching limit (>8000)"
+            description: "{{`{{ $value }}`}} active connections on {{`{{ $labels.instance }}`}}."
+
+    - name: streamline.replication
+      rules:
+        - alert: StreamlineUnderReplicatedPartitions
+          expr: streamline_under_replicated_partitions > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Under-replicated partitions detected"
+            description: "{{`{{ $value }}`}} partitions on {{`{{ $labels.instance }}`}} are under-replicated."
+
+        - alert: StreamlineReplicationLagHigh
+          expr: streamline_multidc_replication_lag_ms > 30000
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Replication lag exceeds 30 seconds"
+            description: "Replica on {{`{{ $labels.instance }}`}} has {{`{{ $value }}`}}ms replication lag."
+
+    {{- with .Values.metrics.prometheusRule.additionalRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
