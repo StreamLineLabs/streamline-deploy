@@ -1,0 +1,179 @@
+{{- if and .Values.metrics.enabled .Values.metrics.grafanaDashboards.enabled -}}
+{{- $fullName := include "streamline.fullname" . -}}
+{{- $labels := include "streamline.labels" . -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-grafana-overview
+  namespace: {{ .Values.metrics.grafanaDashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+    grafana_dashboard: "1"
+    {{- with .Values.metrics.grafanaDashboards.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    grafana_folder: {{ .Values.metrics.grafanaDashboards.folder | default "Streamline" | quote }}
+data:
+  streamline-overview.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "title": "Messages Produced / sec",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{ "expr": "rate(streamline_messages_produced_total[5m])", "legendFormat": "{{`{{instance}}`}}" }]
+        },
+        {
+          "title": "Messages Consumed / sec",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{ "expr": "rate(streamline_messages_consumed_total[5m])", "legendFormat": "{{`{{instance}}`}}" }]
+        },
+        {
+          "title": "Produce Latency (p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [{ "expr": "histogram_quantile(0.99, rate(streamline_produce_latency_seconds_bucket[5m]))", "legendFormat": "p99" }]
+        },
+        {
+          "title": "Fetch Latency (p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [{ "expr": "histogram_quantile(0.99, rate(streamline_fetch_latency_seconds_bucket[5m]))", "legendFormat": "p99" }]
+        },
+        {
+          "title": "Active Connections",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
+          "targets": [{ "expr": "streamline_active_connections" }]
+        },
+        {
+          "title": "Topic Count",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 16 },
+          "targets": [{ "expr": "streamline_topics_total" }]
+        },
+        {
+          "title": "Storage Used",
+          "type": "gauge",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
+          "targets": [{ "expr": "streamline_storage_bytes / streamline_storage_capacity_bytes" }]
+        },
+        {
+          "title": "Memory Usage",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 16 },
+          "targets": [{ "expr": "process_resident_memory_bytes{job=\"streamline\"}" }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["streamline"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Streamline Overview",
+      "uid": "streamline-overview"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-grafana-consumer-lag
+  namespace: {{ .Values.metrics.grafanaDashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+    grafana_dashboard: "1"
+    {{- with .Values.metrics.grafanaDashboards.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    grafana_folder: {{ .Values.metrics.grafanaDashboards.folder | default "Streamline" | quote }}
+data:
+  streamline-consumer-lag.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "panels": [
+        {
+          "title": "Consumer Group Lag",
+          "type": "timeseries",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+          "targets": [{ "expr": "streamline_consumer_group_lag", "legendFormat": "{{`{{group}}`}} / {{`{{topic}}`}}-{{`{{partition}}`}}" }]
+        },
+        {
+          "title": "Consumer Fetch Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "targets": [{ "expr": "rate(streamline_consumer_fetch_total[5m])", "legendFormat": "{{`{{group}}`}}" }]
+        },
+        {
+          "title": "Commit Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "targets": [{ "expr": "rate(streamline_consumer_commit_total[5m])", "legendFormat": "{{`{{group}}`}}" }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["streamline", "consumer"],
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Streamline Consumer Lag",
+      "uid": "streamline-consumer-lag"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-grafana-topics
+  namespace: {{ .Values.metrics.grafanaDashboards.namespace | default .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+    grafana_dashboard: "1"
+    {{- with .Values.metrics.grafanaDashboards.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    grafana_folder: {{ .Values.metrics.grafanaDashboards.folder | default "Streamline" | quote }}
+data:
+  streamline-topics.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "panels": [
+        {
+          "title": "Messages In by Topic",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{ "expr": "rate(streamline_topic_messages_in_total[5m])", "legendFormat": "{{`{{topic}}`}}" }]
+        },
+        {
+          "title": "Messages Out by Topic",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{ "expr": "rate(streamline_topic_messages_out_total[5m])", "legendFormat": "{{`{{topic}}`}}" }]
+        },
+        {
+          "title": "Topic Storage Size",
+          "type": "bargauge",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [{ "expr": "streamline_topic_log_size_bytes", "legendFormat": "{{`{{topic}}`}}" }]
+        },
+        {
+          "title": "Partition Count by Topic",
+          "type": "table",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [{ "expr": "streamline_topic_partitions", "legendFormat": "{{`{{topic}}`}}", "format": "table", "instant": true }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["streamline", "topics"],
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Streamline Topics",
+      "uid": "streamline-topics"
+    }
+{{- end }}

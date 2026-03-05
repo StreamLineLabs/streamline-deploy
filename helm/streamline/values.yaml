@@ -126,6 +126,24 @@ metrics:
     interval: 15s
     scrapeTimeout: 10s
     labels: {}
+  prometheusRule:
+    enabled: false
+    labels: {}
+    # Configurable alert thresholds
+    thresholds:
+      produceLatencyWarning: 0.1    # seconds (p99)
+      fetchLatencyWarning: 0.2      # seconds (p99)
+      consumerLagWarning: 10000     # messages
+      consumerLagCritical: 100000   # messages
+    # Additional custom rules (appended to the groups list)
+    additionalRules: []
+  grafanaDashboards:
+    enabled: false
+    labels: {}
+    # Namespace where Grafana is installed (default: release namespace)
+    namespace: ""
+    # Grafana folder for dashboards
+    folder: "Streamline"
 
 # Network policy
 networkPolicy:
@@ -153,6 +171,49 @@ autoscaling:
 
 # Graceful shutdown
 terminationGracePeriodSeconds: 30
+
+# Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountToken: false
+
+# Ingress (HTTP API access)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: streamline.local
+      paths:
+        - path: /
+          pathType: Prefix
+          servicePort: 9094
+  tls: []
+    # - secretName: streamline-tls
+    #   hosts:
+    #     - streamline.local
+
+# TLS configuration
+tls:
+  enabled: false
+  # Base64-encoded certificate data (or use existing secret)
+  certData: ""
+  keyData: ""
+  caData: ""
+  existingSecret: ""
+
+# Authentication
+auth:
+  enabled: false
+  sasl:
+    mechanism: SCRAM-SHA-256
+    username: ""
+    password: ""
+  existingSecret: ""
+  extraSecrets: {}
 
 # KEDA Auto-Scaling Configuration
 keda:
