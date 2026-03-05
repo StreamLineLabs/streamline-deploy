@@ -1,0 +1,156 @@
+# SDK Conformance Test Specification
+#
+# Every production-ready SDK MUST pass these tests against a live Streamline server.
+# This file defines the standardized conformance test operations.
+# Each SDK implements these in its own testing framework but validates identical behavior.
+#
+# Usage:
+#   1. Start the conformance server:
+#      docker compose -f docker-compose.conformance.yml up -d
+#
+#   2. Run SDK conformance tests (example for Go):
+#      cd ../streamline-go-sdk && go test -tags=conformance ./streamline/...
+#
+#   3. Or run all SDKs via CI:
+#      See streamline/.github/workflows/cross-sdk-integration.yml
+#
+# Environment variables:
+#   STREAMLINE_BOOTSTRAP_SERVERS  (default: localhost:19092)
+#   STREAMLINE_HTTP_URL           (default: http://localhost:19094)
+
+# ============================================================================
+# LEVEL 1: Core Operations (Required for all SDKs)
+# ============================================================================
+
+[L1-TOPIC-001]
+name = "Create topic"
+operation = "admin.create_topic"
+input = { name = "conformance-test-{uuid}", partitions = 3, replication_factor = 1 }
+expect = { success = true }
+
+[L1-TOPIC-002]
+name = "List topics includes created topic"
+operation = "admin.list_topics"
+expect = { contains = "conformance-test-{uuid}" }
+
+[L1-TOPIC-003]
+name = "Describe topic returns correct partition count"
+operation = "admin.describe_topic"
+input = { name = "conformance-test-{uuid}" }
+expect = { partitions = 3 }
+
+[L1-PRODUCE-001]
+name = "Produce single message"
+operation = "producer.send"
+input = { topic = "conformance-test-{uuid}", key = "test-key", value = '{"event":"test"}' }
+expect = { partition = ">=0", offset = ">=0" }
+
+[L1-PRODUCE-002]
+name = "Produce batch of 10 messages"
+operation = "producer.send_batch"
+input = { topic = "conformance-test-{uuid}", count = 10 }
+expect = { success_count = 10 }
+
+[L1-PRODUCE-003]
+name = "Produce with headers"
+operation = "producer.send"
+input = { topic = "conformance-test-{uuid}", key = "header-test", value = "hello", headers = { "trace-id" = "abc-123", "source" = "conformance" } }
+expect = { success = true }
+
+[L1-CONSUME-001]
+name = "Consume from beginning returns all messages"
+operation = "consumer.poll"
+input = { topic = "conformance-test-{uuid}", from_beginning = true, timeout_ms = 10000, max_records = 100 }
+expect = { min_count = 12 }  # 1 + 10 + 1 from produce tests
+
+[L1-CONSUME-002]
+name = "Consumed messages preserve key and value"
+operation = "consumer.poll"
+input = { topic = "conformance-test-{uuid}", from_beginning = true, max_records = 1 }
+expect = { first_key = "test-key", first_value_contains = "event" }
+
+[L1-CONSUME-003]
+name = "Consumed messages preserve headers"
+operation = "consumer.poll"
+input = { topic = "conformance-test-{uuid}", from_beginning = true, filter_key = "header-test" }
+expect = { first_header_trace_id = "abc-123" }
+
+[L1-TOPIC-004]
+name = "Delete topic"
+operation = "admin.delete_topic"
+input = { name = "conformance-test-{uuid}" }
+expect = { success = true }
+
+# ============================================================================
+# LEVEL 2: Consumer Groups (Required for Kafka-protocol SDKs)
+# ============================================================================
+
+[L2-GROUP-001]
+name = "Consumer group commit and fetch offsets"
+operation = "consumer.group_consume"
+input = { topic = "conformance-group-{uuid}", group_id = "test-group-{uuid}", auto_commit = false }
+expect = { committed_offset = ">=0" }
+
+[L2-GROUP-002]
+name = "Consumer group rebalance on second consumer"
+operation = "consumer.group_rebalance"
+input = { topic = "conformance-group-{uuid}", group_id = "test-group-{uuid}", consumer_count = 2 }
+expect = { partitions_distributed = true }
+
+# ============================================================================
+# LEVEL 3: Error Handling (Required for all SDKs)
+# ============================================================================
+
+[L3-ERROR-001]
+name = "Produce to non-existent topic returns error"
+operation = "producer.send"
+input = { topic = "non-existent-topic-{uuid}", value = "test" }
+expect = { error = true, error_type = "TopicNotFound" }
+
+[L3-ERROR-002]
+name = "Error is not retryable for TopicNotFound"
+operation = "check_error"
+expect = { retryable = false }
+
+[L3-ERROR-003]
+name = "Error includes hint text"
+operation = "check_error"
+expect = { has_hint = true }
+
+# ============================================================================
+# LEVEL 4: Schema Registry (Optional — for SDKs with schema support)
+# ============================================================================
+
+[L4-SCHEMA-001]
+name = "Register Avro schema"
+operation = "schema_registry.register"
+input = { subject = "conformance-users-value", schema_type = "AVRO", schema = '{"type":"record","name":"User","fields":[{"name":"id","type":"int"},{"name":"name","type":"string"}]}' }
+expect = { schema_id = ">0" }
+
+[L4-SCHEMA-002]
+name = "Get schema by ID"
+operation = "schema_registry.get"
+input = { schema_id = "{from_L4-SCHEMA-001}" }
+expect = { schema_type = "AVRO", contains_field = "name" }
+
+[L4-SCHEMA-003]
+name = "Check schema compatibility"
+operation = "schema_registry.check_compatibility"
+input = { subject = "conformance-users-value", schema = '{"type":"record","name":"User","fields":[{"name":"id","type":"int"},{"name":"name","type":"string"},{"name":"email","type":["null","string"],"default":null}]}' }
+expect = { compatible = true }
+
+# ============================================================================
+# LEVEL 5: Auth & TLS (Optional — for SDKs with auth support)
+# ============================================================================
+
+[L5-AUTH-001]
+name = "SASL/PLAIN authentication succeeds"
+operation = "connect"
+input = { sasl_mechanism = "PLAIN", username = "admin", password = "admin-secret" }
+expect = { connected = true }
+
+[L5-AUTH-002]
+name = "SASL/PLAIN with wrong password fails"
+operation = "connect"
+input = { sasl_mechanism = "PLAIN", username = "admin", password = "wrong" }
+expect = { error = true, error_type = "AuthenticationFailed" }
