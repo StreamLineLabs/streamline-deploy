@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 - fix: correct volume mount paths in docker-compose (2026-03-05)
+
+- docs: add deployment troubleshooting guide (2026-03-06)
 ## [Unreleased]
 
 ## [0.2.0] - 2026-02-28
