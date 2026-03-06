@@ -6,14 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-- fix: correct volume mount paths in docker-compose (2026-03-05)
-
-- docs: add deployment troubleshooting guide (2026-03-06)
-
-- chore: update base image to alpine 3.19 (2026-03-06)
 ## [Unreleased]
 
-## [0.2.0] - 2026-02-28
+- fix: correct volume mount paths in docker-compose (2026-03-05)
+- docs: add deployment troubleshooting guide (2026-03-06)
+- chore: update base image to alpine 3.19 (2026-03-06)
 - **Documentation**: add monitoring setup instructions
 - **Changed**: update monitoring configuration
 - **Fixed**: correct volume mount paths in docker-compose
@@ -26,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Update base image tag in Dockerfile
+
 
 ## [0.2.0] - 2026-02-18
 

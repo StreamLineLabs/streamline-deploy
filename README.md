@@ -53,9 +53,6 @@ docker compose -f docker-compose.demo.yml up -d
 ### Docker
 
 ```bash
-# Docker Hub
-docker pull streamlinelabs/streamline:latest
-
 # GitHub Container Registry
 docker pull ghcr.io/streamlinelabs/streamline:latest
 
