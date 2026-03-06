@@ -4,6 +4,14 @@ COPY . .
 RUN cargo build --release --features "full,web-ui"
 
 FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="Streamline Playground" \
+      org.opencontainers.image.description="Streamline playground with demo data and web UI — for evaluation and demos" \
+      org.opencontainers.image.source="https://github.com/streamlinelabs/streamline-deploy" \
+      org.opencontainers.image.vendor="StreamlineLabs" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="0.2.0"
+
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/target/release/streamline /usr/local/bin/streamline
 EXPOSE 9092 9094

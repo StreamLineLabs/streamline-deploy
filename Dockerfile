@@ -41,6 +41,14 @@ RUN cargo build --release
 # Runtime stage
 FROM debian:bookworm-20250224-slim
 
+LABEL org.opencontainers.image.title="Streamline" \
+      org.opencontainers.image.description="The Redis of Streaming — Kafka-compatible, single-binary streaming platform" \
+      org.opencontainers.image.url="https://github.com/streamlinelabs/streamline" \
+      org.opencontainers.image.source="https://github.com/streamlinelabs/streamline-deploy" \
+      org.opencontainers.image.vendor="StreamlineLabs" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="0.2.0"
+
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
