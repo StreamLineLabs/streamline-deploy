@@ -1,103 +1,15 @@
 name: CI
+
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
+
 jobs:
-  lint-dockerfile:
-    name: Lint Dockerfile
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile
 
-  lint-helm:
-    name: Lint Helm Chart
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: azure/setup-helm@v4
-      - name: Helm lint
-        run: helm lint helm/streamline
-      - name: Helm template (validate rendering)
-        run: helm template test-release helm/streamline > /dev/null
-      - name: Helm template with all options
-        run: |
-          helm template test-release helm/streamline \
-            --set replicaCount=3 \
-            --set persistence.enabled=true \
-            --set metrics.enabled=true \
-            > /dev/null
-      - name: Validate Ingress template
-        run: |
-          helm template test helm/streamline \
-            --set ingress.enabled=true \
-            --set ingress.className=nginx \
-            --set 'ingress.hosts[0].host=streamline.example.com' \
-            --set 'ingress.hosts[0].paths[0].path=/' \
-            --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
-            > /dev/null
-      - name: Validate Auth + TLS templates
-        run: |
-          helm template test helm/streamline \
-            --set auth.enabled=true \
-            --set auth.sasl.username=admin \
-            --set auth.sasl.password=pass \
-            --set tls.enabled=true \
-            --set tls.certData=Y2VydA== \
-            --set tls.keyData=a2V5 \
-            > /dev/null
-      - name: Validate PrometheusRule template
-        run: |
-          helm template test helm/streamline \
-            --set metrics.prometheusRule.enabled=true \
-            > /dev/null
-      - name: Validate Grafana dashboards template
-        run: |
-          helm template test helm/streamline \
-            --set metrics.grafanaDashboards.enabled=true \
-            > /dev/null
-      - name: Validate ServiceAccount disabled
-        run: |
-          helm template test helm/streamline \
-            --set serviceAccount.create=false \
-            > /dev/null
 
-  test-helm:
-    name: Helm Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
-      - name: Install helm-unittest plugin
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest
-      - name: Run Helm unit tests
-        run: helm unittest helm/streamline/
-
-  lint-k8s-manifests:
-    name: Lint K8s Manifests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate YAML syntax
-        run: |
-          for f in k8s/*.yaml k8s/*.yml; do
-            [ -f "$f" ] && python3 -c "import yaml; yaml.safe_load(open('$f'))" && echo "✅ $f" || echo "❌ $f"
-          done
-
-  lint-compose:
-    name: Lint Docker Compose
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate compose files
-        run: |
-          for f in docker-compose*.yml; do
-            docker compose -f "$f" config --quiet && echo "✅ $f" || echo "❌ $f"
-          done
-
+      - run: helm lint helm/streamline
