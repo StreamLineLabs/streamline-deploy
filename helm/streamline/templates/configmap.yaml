@@ -10,6 +10,15 @@ data:
   STREAMLINE_DATA_DIR: {{ .Values.config.dataDir | quote }}
   STREAMLINE_LISTEN_ADDR: {{ .Values.config.kafkaAddr | quote }}
   STREAMLINE_HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
+  {{- if .Values.config.autoCreateTopics }}
+  STREAMLINE_AUTO_CREATE_TOPICS: "true"
+  {{- end }}
+  {{- if .Values.config.playground }}
+  STREAMLINE_PLAYGROUND: "true"
+  {{- end }}
+  {{- if .Values.config.ephemeral }}
+  STREAMLINE_IN_MEMORY: "true"
+  {{- end }}
   {{- if .Values.config.clusterEnabled }}
   STREAMLINE_CLUSTER_ENABLED: "true"
   STREAMLINE_INTER_BROKER_PORT: {{ .Values.config.interBrokerPort | default 9093 | quote }}

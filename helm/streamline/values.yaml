@@ -1,50 +1,130 @@
-# Default values for Streamline Helm chart
+# =============================================================================
+# Streamline Helm Chart — values.yaml
+# =============================================================================
+# Full reference: https://streamlinelabs.dev/docs/operations/helm-values
+#
+# Quick start:
+#   helm install streamline ./helm/streamline
+#
+# Production (3-node cluster with monitoring):
+#   helm install streamline ./helm/streamline \
+#     --set replicaCount=3 \
+#     --set metrics.serviceMonitor.enabled=true \
+#     --set persistence.size=50Gi
+# =============================================================================
 
-# Number of replicas
+# -- Number of Streamline broker replicas.
+# For production clusters, use 3 or 5 (odd numbers for Raft quorum).
 replicaCount: 1
 
+# -- Pod management policy for the StatefulSet.
+# "Parallel" starts all pods simultaneously (faster, good for single-node).
+# "OrderedReady" starts pods sequentially (safer for multi-node clusters).
+# Use "OrderedReady" when replicaCount > 1 with clustering enabled.
+podManagementPolicy: Parallel
+
+# -- Container image configuration
 image:
+  # -- Docker image registry and name
   repository: ghcr.io/streamlinelabs/streamline
+  # -- Image tag (defaults to chart appVersion if empty)
   tag: "0.2.0"
+  # -- Image pull policy: Always, IfNotPresent, or Never
   pullPolicy: IfNotPresent
 
+# -- Secrets for pulling images from private registries
 imagePullSecrets: []
+# -- Override the chart name
 nameOverride: ""
+# -- Override the full release name
 fullnameOverride: ""
 
-# Server configuration
+# =============================================================================
+# Server Configuration
+# =============================================================================
+
+# -- Streamline server configuration passed as CLI flags
 config:
+  # -- Log level: trace, debug, info, warn, error
   logLevel: info
+  # -- Data directory for persistent segment storage
   dataDir: /data
+  # -- Kafka protocol listen address (clients connect here)
   kafkaAddr: "0.0.0.0:9092"
+  # -- HTTP API listen address (REST, GraphQL, metrics, health checks)
   httpAddr: "0.0.0.0:9094"
-  # Cluster settings (for multi-node)
+  # -- Auto-create topics when a producer writes to a non-existent topic.
+  # Disable in production to prevent accidental topic creation.
+  autoCreateTopics: true
+  # -- Playground mode creates demo topics with sample data on startup.
+  # Useful for evaluation and demos; disable in production.
+  playground: false
+  # -- Ephemeral mode stores all data in-memory only (no disk persistence).
+  # Use for CI/CD testing. All data is lost on restart.
+  ephemeral: false
+  # -- Extra CLI arguments passed directly to the streamline binary.
+  # Example: ["--features", "analytics", "--max-message-size", "10485760"]
+  extraArgs: []
+  # -- Enable clustering (multi-node Raft consensus).
+  # Requires replicaCount >= 3 for quorum.
   # clusterEnabled: false
+  # -- Inter-broker communication port (used for Raft replication).
+  # Must be different from kafkaAddr port.
   # interBrokerPort: 9093
 
-# Service configuration
+# =============================================================================
+# Networking
+# =============================================================================
+
+# -- Internal ClusterIP service configuration
 service:
+  # -- Service type: ClusterIP, NodePort, LoadBalancer
   type: ClusterIP
+  # -- Kafka protocol port
   kafkaPort: 9092
+  # -- HTTP API port
   httpPort: 9094
+  # -- Additional annotations (e.g., for service mesh)
   annotations: {}
 
-# External service (LoadBalancer)
+# -- External service for client access outside the cluster
 externalService:
+  # -- Enable a separate LoadBalancer service for external access
   enabled: false
+  # -- External service type
   type: LoadBalancer
+  # -- External Kafka port
   kafkaPort: 9092
+  # -- Annotations (e.g., cloud provider LB config)
   annotations: {}
 
-# Persistent storage
+# =============================================================================
+# Storage
+# =============================================================================
+
+# -- Persistent volume configuration for segment data
 persistence:
+  # -- Enable persistent storage. Disable only for ephemeral/testing deployments.
   enabled: true
+  # -- Storage class name. Empty string uses the cluster default.
   storageClass: ""
+  # -- Access mode: ReadWriteOnce (single node) or ReadWriteMany (shared)
   accessMode: ReadWriteOnce
+  # -- Volume size. Size depends on retention policy and throughput.
+  # Rule of thumb: daily_bytes × retention_days × 1.2 (overhead)
   size: 10Gi
+  # -- Additional PVC annotations
   annotations: {}
 
-# Resource limits and requests
+# =============================================================================
+# Resources & Security
+# =============================================================================
+
+# -- CPU and memory resource requests and limits.
+# Adjust based on expected throughput:
+#   Light (< 10K msg/s):  256Mi / 100m request, 1Gi / 1000m limit
+#   Medium (10-100K msg/s): 1Gi / 500m request, 4Gi / 2000m limit
+#   Heavy (> 100K msg/s):  4Gi / 2000m request, 16Gi / 8000m limit
 resources:
   requests:
     memory: "256Mi"
@@ -53,21 +133,35 @@ resources:
     memory: "1Gi"
     cpu: "1000m"
 
-# Pod security context
+# -- Pod-level security context applied to all containers
 podSecurityContext:
+  # -- File system group ID for volume mounts
   fsGroup: 1000
+  # -- Require non-root user
   runAsNonRoot: true
+  # -- User ID for the streamline process
   runAsUser: 1000
 
-# Container security context
+# -- Graceful shutdown timeout in seconds.
+# Should be >= your longest in-flight produce batch timeout.
+terminationGracePeriodSeconds: 30
+
+# -- Container-level security context (applied to the streamline container)
 securityContext:
+  # -- Prevent privilege escalation
   allowPrivilegeEscalation: false
+  # -- Read-only root filesystem (writes go to /tmp emptyDir)
   readOnlyRootFilesystem: true
+  # -- Drop all Linux capabilities
   capabilities:
     drop:
       - ALL
 
-# Probes
+# =============================================================================
+# Health Probes
+# =============================================================================
+
+# -- Liveness probe detects deadlocked processes. Failing pods are restarted.
 livenessProbe:
   httpGet:
     path: /health/live
@@ -77,6 +171,7 @@ livenessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
+# -- Readiness probe gates traffic. Failing pods are removed from Service endpoints.
 readinessProbe:
   httpGet:
     path: /health/ready
@@ -86,6 +181,7 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
 
+# -- Startup probe allows slow starts. Liveness/readiness are paused until this succeeds.
 startupProbe:
   httpGet:
     path: /health/live
@@ -93,16 +189,21 @@ startupProbe:
   initialDelaySeconds: 5
   periodSeconds: 5
   timeoutSeconds: 3
+  # -- 30 failures × 5s = 150s maximum startup time
   failureThreshold: 30
 
-# Node selector
+# =============================================================================
+# Scheduling
+# =============================================================================
+
+# -- Node selector for pod placement
 nodeSelector: {}
 
-# Tolerations
+# -- Tolerations for node taints
 tolerations: []
 
-# Affinity rules
-# Default: soft pod anti-affinity to spread replicas across nodes
+# -- Affinity rules for pod placement.
+# Default: soft anti-affinity to spread replicas across nodes.
 affinity:
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
@@ -113,39 +214,62 @@ affinity:
               app.kubernetes.io/name: streamline
           topologyKey: kubernetes.io/hostname
 
-# Pod disruption budget
+# -- Pod Disruption Budget ensures minimum availability during voluntary disruptions.
+# Set minAvailable < replicaCount to allow rolling updates.
 podDisruptionBudget:
   enabled: true
+  # -- Minimum pods that must remain available during disruption
   minAvailable: 1
 
-# Prometheus metrics
+# =============================================================================
+# Observability
+# =============================================================================
+
+# -- Prometheus metrics configuration
 metrics:
+  # -- Enable the /metrics endpoint on the HTTP port
   enabled: true
+  # -- ServiceMonitor for Prometheus Operator auto-discovery
   serviceMonitor:
+    # -- Create a ServiceMonitor resource
     enabled: false
+    # -- Scrape interval
     interval: 15s
+    # -- Scrape timeout (must be < interval)
     scrapeTimeout: 10s
+    # -- Additional labels for ServiceMonitor selection
     labels: {}
+  # -- PrometheusRule for alerting
   prometheusRule:
+    # -- Create a PrometheusRule resource
     enabled: false
+    # -- Additional labels for rule selection
     labels: {}
-    # Configurable alert thresholds
+    # -- Alert thresholds (customize per environment)
     thresholds:
-      produceLatencyWarning: 0.1    # seconds (p99)
-      fetchLatencyWarning: 0.2      # seconds (p99)
-      consumerLagWarning: 10000     # messages
-      consumerLagCritical: 100000   # messages
-    # Additional custom rules (appended to the groups list)
+      produceLatencyWarning: 0.1    # p99 produce latency in seconds
+      fetchLatencyWarning: 0.2      # p99 fetch latency in seconds
+      consumerLagWarning: 10000     # consumer lag in messages
+      consumerLagCritical: 100000   # critical consumer lag threshold
+    # -- Additional custom alerting rules appended to the rule groups
     additionalRules: []
+  # -- Grafana dashboard ConfigMaps
   grafanaDashboards:
+    # -- Create Grafana dashboard ConfigMaps
     enabled: false
+    # -- Additional labels for dashboard discovery
     labels: {}
-    # Namespace where Grafana is installed (default: release namespace)
+    # -- Namespace where Grafana is installed (defaults to release namespace)
     namespace: ""
-    # Grafana folder for dashboards
+    # -- Grafana folder name for the dashboards
     folder: "Streamline"
 
-# Network policy
+# =============================================================================
+# Network Policy
+# =============================================================================
+
+# -- Network policy restricts pod-to-pod traffic.
+# Default: only pods in the same namespace can access Kafka and HTTP ports.
 networkPolicy:
   enabled: true
   ingress:
@@ -156,33 +280,54 @@ networkPolicy:
           protocol: TCP
         - port: 9094
           protocol: TCP
-  # Additional custom ingress/egress rules
+  # -- Additional custom ingress rules
   additionalIngress: []
+  # -- Additional custom egress rules
   additionalEgress: []
 
+# =============================================================================
 # Autoscaling
+# =============================================================================
+
+# -- Horizontal Pod Autoscaler (standard Kubernetes HPA).
+# Note: HPA and KEDA are mutually exclusive — enable only one.
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 5
+  # -- Target CPU utilization percentage for scaling
   targetCPUUtilizationPercentage: 75
+  # -- Target memory utilization (set to ~ to disable)
   targetMemoryUtilizationPercentage: ~
+  # -- Additional custom metrics for scaling decisions
   additionalMetrics: []
 
-# Graceful shutdown
-terminationGracePeriodSeconds: 30
+# =============================================================================
+# Service Account
+# =============================================================================
 
-# Service account
+# -- Service account for the Streamline pods
 serviceAccount:
+  # -- Create a dedicated ServiceAccount
   create: true
+  # -- ServiceAccount name (auto-generated if empty)
   name: ""
+  # -- Additional annotations (e.g., for IAM role binding)
   annotations: {}
+  # -- Disable auto-mounting the service account token (security hardening)
   automountToken: false
 
-# Ingress (HTTP API access)
+# =============================================================================
+# Ingress
+# =============================================================================
+
+# -- Ingress for HTTP API access from outside the cluster.
+# Only exposes the HTTP API (port 9094); Kafka protocol requires a LoadBalancer.
 ingress:
   enabled: false
+  # -- Ingress class name (e.g., "nginx", "traefik")
   className: ""
+  # -- Ingress annotations
   annotations: {}
     # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
   hosts:
@@ -191,38 +336,69 @@ ingress:
         - path: /
           pathType: Prefix
           servicePort: 9094
+  # -- TLS configuration for HTTPS
   tls: []
     # - secretName: streamline-tls
     #   hosts:
     #     - streamline.local
 
-# TLS configuration
+# =============================================================================
+# Security — TLS & Authentication
+# =============================================================================
+
+# -- TLS configuration for encrypting Kafka protocol and HTTP API traffic
 tls:
+  # -- Enable TLS on both Kafka and HTTP ports
   enabled: false
-  # Base64-encoded certificate data (or use existing secret)
+  # -- Base64-encoded PEM certificate (or use existingSecret)
   certData: ""
+  # -- Base64-encoded PEM private key
   keyData: ""
+  # -- Base64-encoded PEM CA certificate for client verification (mTLS)
   caData: ""
+  # -- Use an existing Kubernetes Secret instead of inline cert data.
+  # Secret must contain tls.crt, tls.key, and optionally ca.crt keys.
   existingSecret: ""
 
-# Authentication
+# -- SASL authentication configuration
 auth:
+  # -- Enable authentication on Kafka protocol connections
   enabled: false
   sasl:
+    # -- SASL mechanism: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
     mechanism: SCRAM-SHA-256
+    # -- Admin username
     username: ""
+    # -- Admin password (use existingSecret in production)
     password: ""
+  # -- Use an existing Secret for auth credentials.
+  # Secret must contain "username" and "password" keys.
   existingSecret: ""
+  # -- Additional secrets mounted as files (e.g., user credential files)
   extraSecrets: {}
 
-# KEDA Auto-Scaling Configuration
+# =============================================================================
+# KEDA Autoscaling
+# =============================================================================
+
+# -- KEDA-based autoscaling for event-driven scaling.
+# Requires KEDA operator installed in the cluster.
+# Note: mutually exclusive with autoscaling.enabled.
 keda:
+  # -- Enable KEDA ScaledObject
   enabled: false
+  # -- How often KEDA checks the trigger (seconds)
   pollingInterval: 15
+  # -- Cooldown period before scaling down (seconds)
   cooldownPeriod: 300
+  # -- Scale to zero when idle (set > 0 to keep minimum replicas warm)
   idleReplicaCount: 0
+  # -- Minimum replica count during active scaling
   minReplicaCount: 1
+  # -- Maximum replica count
   maxReplicaCount: 10
+  # -- KEDA trigger definitions.
+  # Default: scale based on messages-per-second from the HTTP metrics endpoint.
   triggers:
     - type: metrics-api
       metadata:

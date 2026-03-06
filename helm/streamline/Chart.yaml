@@ -13,4 +13,5 @@ home: https://github.com/streamlinelabs/streamline-deploy
 sources:
   - https://github.com/streamlinelabs/streamline-deploy
 maintainers:
-  - name: josedab
+  - name: Jose David Baena
+    url: https://github.com/josedab

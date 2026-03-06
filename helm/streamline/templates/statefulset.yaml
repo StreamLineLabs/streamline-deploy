@@ -7,7 +7,7 @@ metadata:
 spec:
   serviceName: {{ include "streamline.headlessServiceName" . }}
   replicas: {{ .Values.replicaCount }}
-  podManagementPolicy: Parallel
+  podManagementPolicy: {{ .Values.podManagementPolicy | default "Parallel" }}
   selector:
     matchLabels:
       {{- include "streamline.selectorLabels" . | nindent 6 }}
@@ -30,6 +30,7 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 30 }}
       containers:
         - name: streamline
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -77,6 +78,13 @@ spec:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 5 && kill -SIGTERM 1
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
