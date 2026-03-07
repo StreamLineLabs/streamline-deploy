@@ -11,6 +11,7 @@ metadata:
     app.kubernetes.io/component: autoscaling
     app.kubernetes.io/managed-by: keda
 spec:
+
   scaleTargetRef:
     name: streamline
     kind: StatefulSet
