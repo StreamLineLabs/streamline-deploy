@@ -45,3 +45,12 @@
 {{- end }}
 
 📚 Documentation: https://github.com/streamlinelabs/streamline-docs
+
+
+IMPORTANT: Ensure proper resource limits are set to prevent memory leaks:
+
+  resources:
+    limits:
+      memory: {{ .Values.resources.limits.memory | default "2Gi" }}
+    requests:
+      memory: {{ .Values.resources.requests.memory | default "512Mi" }}
