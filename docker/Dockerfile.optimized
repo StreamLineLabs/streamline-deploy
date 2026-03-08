@@ -1,0 +1,10 @@
+# Optimized multi-stage Dockerfile for minimal image size
+FROM rust:1.80-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release --features full
+
+FROM gcr.io/distroless/cc-debian12
+COPY --from=builder /build/target/release/streamline /usr/local/bin/streamline
+EXPOSE 9092 9094
+ENTRYPOINT ["streamline"]
