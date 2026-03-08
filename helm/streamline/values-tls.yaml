@@ -1,0 +1,10 @@
+# TLS configuration values for Streamline Helm chart
+tls:
+  enabled: true
+  certSecretName: streamline-tls
+  # Certificate paths inside the container
+  certFile: /etc/streamline/tls/tls.crt
+  keyFile: /etc/streamline/tls/tls.key
+  caFile: /etc/streamline/tls/ca.crt
+  # Enable mutual TLS (require client certificates)
+  mutualTls: false
