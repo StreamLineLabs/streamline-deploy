@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.80-slim-bookworm AS builder
+FROM rust:1.94-slim-bookworm AS builder
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ RUN touch src/main.rs src/cli.rs src/lib.rs
 RUN cargo build --release
 
 # Runtime stage
-FROM debian:bookworm-20250224-slim
+FROM debian:bookworm-20260223-slim
 
 LABEL org.opencontainers.image.title="Streamline" \
       org.opencontainers.image.description="The Redis of Streaming — Kafka-compatible, single-binary streaming platform" \
