@@ -54,8 +54,9 @@ config:
   # -- HTTP API listen address (REST, GraphQL, metrics, health checks)
   httpAddr: "0.0.0.0:9094"
   # -- Auto-create topics when a producer writes to a non-existent topic.
-  # Disable in production to prevent accidental topic creation.
-  autoCreateTopics: true
+  # ⚠️  PRODUCTION: Set to false to prevent accidental topic creation from
+  # typos or misconfigured clients. Use explicit topic provisioning instead.
+  autoCreateTopics: false
   # -- Playground mode creates demo topics with sample data on startup.
   # Useful for evaluation and demos; disable in production.
   playground: false
