@@ -16,7 +16,7 @@ services:
   # ── Streamline Cluster (3 nodes) ────────────────────────────────────────────
 
   streamline-n1:
-    image: ghcr.io/streamlinelabs/streamline:latest
+    image: ghcr.io/streamlinelabs/streamline:0.2.0
     container_name: streamline-n1
     hostname: streamline-n1
     environment:
@@ -43,7 +43,7 @@ services:
       retries: 10
 
   streamline-n2:
-    image: ghcr.io/streamlinelabs/streamline:latest
+    image: ghcr.io/streamlinelabs/streamline:0.2.0
     container_name: streamline-n2
     hostname: streamline-n2
     environment:
@@ -70,7 +70,7 @@ services:
       retries: 10
 
   streamline-n3:
-    image: ghcr.io/streamlinelabs/streamline:latest
+    image: ghcr.io/streamlinelabs/streamline:0.2.0
     container_name: streamline-n3
     hostname: streamline-n3
     environment:
