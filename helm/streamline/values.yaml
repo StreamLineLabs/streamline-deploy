@@ -257,7 +257,8 @@ metrics:
   # -- Grafana dashboard ConfigMaps
   grafanaDashboards:
     # -- Create Grafana dashboard ConfigMaps
-    enabled: false
+    # Dashboards are enabled by default for use with the monitoring profile
+    enabled: true
     # -- Additional labels for dashboard discovery
     labels: {}
     # -- Namespace where Grafana is installed (defaults to release namespace)
