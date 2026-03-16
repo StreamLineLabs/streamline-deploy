@@ -35,3 +35,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Health check and readiness probe configurations
 - CI pipeline for validating deployment artifacts
 - chore: update base Docker image versions
+- chore: add liveness probe configuration to Helm templates
