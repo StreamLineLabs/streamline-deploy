@@ -36,3 +36,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI pipeline for validating deployment artifacts
 - chore: update base Docker image versions
 - chore: add liveness probe configuration to Helm templates
+- feat: add multi-region Helm chart topology support
