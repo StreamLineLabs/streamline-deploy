@@ -1,0 +1,36 @@
+# Moonshot feature demo with seeded data
+# Run: docker compose -f docker-compose.moonshot-demo.yml up
+version: "3.8"
+services:
+  streamline:
+    image: streamlinelabs/streamline:latest
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      STREAMLINE_FEATURES: "semantic-topics,agent-memory,attestation,branches"
+    volumes:
+      - ./demo-data:/demo-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/health"]
+      interval: 5s
+      retries: 10
+
+  # Seed demo data after Streamline is healthy
+  demo-seeder:
+    image: streamlinelabs/streamline:latest
+    depends_on:
+      streamline:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Create semantic topic
+        streamline-cli --broker localhost:9092 topics create logs.app --partitions 3
+        # Create contract topic  
+        streamline-cli --broker localhost:9092 topics create orders --partitions 2
+        # Seed some data
+        for i in $(seq 1 50); do
+          streamline-cli --broker localhost:9092 produce logs.app -m "Log entry $i: application started processing request"
+        done
+        echo "Demo data seeded successfully!"

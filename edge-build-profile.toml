@@ -1,0 +1,47 @@
+# Edge Build Profile for Streamline
+#
+# Defines the minimal feature set and compiler optimizations for edge
+# deployments. The edge binary targets IoT gateways, ARM64 devices, and
+# other resource-constrained environments.
+#
+# Usage (from the core `streamline/` directory):
+#   cargo build --release --features "compression,edge"
+#
+# Or copy the [profile.edge-release] section into your Cargo.toml and build:
+#   cargo build --profile edge-release --features "compression,edge"
+#
+# See also: Dockerfile.edge in this repository for containerized builds.
+
+[features]
+# Minimal feature set for edge deployments.
+default = ["compression"]
+edge = ["compression", "edge"]
+
+# Excluded features (saves binary size and compile time):
+# - ai: ML inference, embedding models (~8MB binary increase)
+# - analytics: SQL analytics engine (~4MB)
+# - iceberg: Apache Iceberg integration (~6MB)
+# - graphql: GraphQL query endpoint (~3MB)
+# - schema-registry: Avro/Protobuf schema registry (~2MB)
+# - lakehouse: Lakehouse-native storage (~5MB)
+# - cdc: Change Data Capture (~2MB)
+# - kafka-connect: Kafka Connect compatibility (~3MB)
+# - repl: Interactive REPL (~1MB)
+# - geo-replication: Multi-DC replication (~2MB)
+
+[profile.edge-release]
+# Optimize for binary size over speed.
+opt-level = "z"
+# Link-time optimization across all crates.
+lto = true
+# Single codegen unit maximizes LTO effectiveness.
+codegen-units = 1
+# Strip debug info and symbols from the final binary.
+strip = true
+# Abort on panic (smaller binary, no unwinding overhead).
+panic = "abort"
+
+# Expected binary sizes:
+# - x86_64: ~12-15MB (stripped)
+# - aarch64: ~10-13MB (stripped)
+# - Full edition for comparison: ~45-55MB
