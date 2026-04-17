@@ -407,3 +407,52 @@ keda:
         targetValue: "100000"
         url: "http://{{ include \"streamline.fullname\" . }}:9094/scaling/metrics"
         valueLocation: "messages_per_second"
+
+# =============================================================================
+# Moonshot Features (Experimental)
+# =============================================================================
+# WARNING: These features are EXPERIMENTAL and not included in the default
+# build. Enable only for evaluation or design-partner deployments.
+# They require the Streamline binary to be compiled with --features moonshot.
+# See docs/reference/feature-flags.md for details.
+moonshot:
+  # -- Semantic Topics (M2): embed-on-write vector indexing for semantic search
+  semanticTopics:
+    enabled: false
+    # -- Default embedding model for new semantic topics
+    defaultModel: "bge-small"
+    # -- Number of background embedding worker threads
+    embeddingWorkers: 4
+    # -- Maximum pending embed jobs before backpressure is applied
+    backpressureThreshold: 10000
+
+  # -- Agent Memory (M1): three-tier persistent memory for AI agents via MCP
+  agentMemory:
+    enabled: false
+    # -- Default episodic memory retention (days)
+    episodicRetentionDays: 90
+    # -- Decay half-life (days): low-importance memories decay over time
+    decayHalfLifeDays: 30
+    # -- Enable per-agent envelope encryption
+    encryptionEnabled: false
+
+  # -- Contracts & Provenance (M4): producer-side enforcement + attestations
+  contracts:
+    enabled: false
+    # -- KMS provider: "local" (Ed25519 local keys) | "vault" | "aws-kms"
+    kmsProvider: "local"
+    # -- Vault configuration (when kmsProvider=vault)
+    vault:
+      url: ""
+      mountPath: "transit"
+      keyName: "streamline"
+
+  # -- Branched Streams (M5): copy-on-write topic branches for replay
+  branches:
+    enabled: false
+    # -- Maximum storage per branch (bytes)
+    maxStorageBytes: 10737418240  # 10GB
+    # -- Maximum branch lifetime (hours)
+    maxLifetimeHours: 168  # 7 days
+    # -- Auto-discard idle branches after this many hours
+    autoDiscardIdleHours: 72

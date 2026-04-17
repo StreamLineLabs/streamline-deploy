@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
 [![Helm](https://img.shields.io/badge/Helm-3.x-0F1689.svg)](https://helm.sh/)
+[![Release](https://img.shields.io/github/v/release/streamlinelabs/streamline-deploy?label=release)](https://github.com/streamlinelabs/streamline-deploy/releases)
 
 Deployment artifacts for [Streamline](https://github.com/streamlinelabs/streamline) — Helm charts, Kubernetes manifests, and Docker configurations.
 
