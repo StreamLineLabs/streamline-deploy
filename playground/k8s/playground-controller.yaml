@@ -29,7 +29,7 @@ spec:
             - name: INSTANCE_TTL_MINUTES
               value: "30"
             - name: STREAMLINE_IMAGE
-              value: "ghcr.io/streamlinelabs/streamline:0.2.0"
+              value: "ghcr.io/streamlinelabs/streamline:0.3.0"
             - name: INSTANCE_MEMORY_LIMIT
               value: "256Mi"
             - name: INSTANCE_CPU_LIMIT

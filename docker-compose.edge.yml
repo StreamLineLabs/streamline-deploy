@@ -18,7 +18,7 @@ services:
       dockerfile: Dockerfile.edge
       platforms:
         - ${PLATFORM:-linux/amd64}
-    image: ghcr.io/streamlinelabs/streamline-edge:0.2.0
+    image: ghcr.io/streamlinelabs/streamline-edge:0.3.0
     container_name: streamline-edge
     restart: unless-stopped
     ports:

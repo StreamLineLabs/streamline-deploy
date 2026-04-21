@@ -28,7 +28,7 @@ image:
   # -- Docker image registry and name
   repository: ghcr.io/streamlinelabs/streamline
   # -- Image tag (defaults to chart appVersion if empty)
-  tag: "0.2.0"
+  tag: "0.3.0"
   # -- Image pull policy: Always, IfNotPresent, or Never
   pullPolicy: IfNotPresent
 

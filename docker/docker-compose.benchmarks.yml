@@ -133,7 +133,7 @@ services:
   # Grafana (for visualization during benchmarks)
   # =============================================================================
   grafana:
-    image: grafana/grafana:10.2.0
+    image: grafana/grafana:10.3.0
     hostname: grafana
     container_name: benchmark-grafana
     ports:

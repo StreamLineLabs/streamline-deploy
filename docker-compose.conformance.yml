@@ -4,7 +4,7 @@ version: "3.8"
 
 services:
   streamline-conformance:
-    image: ghcr.io/streamlinelabs/streamline:0.2.0
+    image: ghcr.io/streamlinelabs/streamline:0.3.0
     container_name: streamline-conformance
     ports:
       - "19092:9092"    # Kafka protocol
