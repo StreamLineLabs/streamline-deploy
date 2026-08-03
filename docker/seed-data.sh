@@ -16,14 +16,11 @@ echo "╚═══════════════════════�
 echo ""
 
 wait_for_server
-create_topics
+seed_topics
 
 echo "🌱 Seeding sample data..."
 echo ""
-seed_events
-seed_logs
-seed_metrics
-seed_orders
+seed_all_fixtures
 
 echo ""
 echo "══════════════════════════════════════════════"

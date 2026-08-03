@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
+# Referenced by the sourcing entry point after this library is loaded.
+# shellcheck disable=SC2034
 TOPICS=("demo-events" "demo-logs" "demo-metrics" "demo-orders")
 
-create_topics() {
+seed_topics() {
   echo "📦 Creating demo topics..."
   create_topic "demo-events" 2
   create_topic "demo-logs" 1
@@ -90,4 +92,11 @@ seed_orders() {
     produce_message "demo-orders" "$msg"
   done
   echo "  ✅ ${#orders[@]} order records produced"
+}
+
+seed_all_fixtures() {
+  seed_events
+  seed_logs
+  seed_metrics
+  seed_orders
 }
