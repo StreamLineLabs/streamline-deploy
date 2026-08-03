@@ -1,15 +1,17 @@
 suite: Streamline Grafana dashboards
 templates:
-  - grafana-dashboards.yaml
+  - grafana-overview.yaml
+  - grafana-consumer-lag.yaml
+  - grafana-topics.yaml
 
 tests:
-  - it: should create three dashboard ConfigMaps by default
+  - it: should create one ConfigMap per dashboard template by default
     asserts:
       - hasDocuments:
-          count: 3
+          count: 1
 
   - it: should create the overview dashboard
-    documentIndex: 0
+    template: grafana-overview.yaml
     asserts:
       - isKind:
           of: ConfigMap
@@ -20,7 +22,7 @@ tests:
           path: data["streamline-overview.json"]
 
   - it: should create the consumer lag dashboard
-    documentIndex: 1
+    template: grafana-consumer-lag.yaml
     asserts:
       - isKind:
           of: ConfigMap
@@ -31,7 +33,7 @@ tests:
           path: data["streamline-consumer-lag.json"]
 
   - it: should create the topics dashboard
-    documentIndex: 2
+    template: grafana-topics.yaml
     asserts:
       - isKind:
           of: ConfigMap
