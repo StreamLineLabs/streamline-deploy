@@ -50,7 +50,7 @@ shell-tests: ## Run shell characterization tests
 	bash tests/seed-data_test.sh
 
 shellcheck: ## Run ShellCheck on tracked shell scripts
-	shellcheck $$(git ls-files '*.sh')
+	shellcheck -x -P docker $$(git ls-files '*.sh')
 
 clean: ## Clean up containers
 	docker compose down -v 2>/dev/null || true
