@@ -13,13 +13,22 @@ printf '%s\n' "$*" >> "$CURL_LOG"
 EOF
 chmod +x "$TMP_DIR/bin/curl"
 
+mkdir -p "$TMP_DIR/staged"
+cp "$REPO_ROOT/docker/seed-data.sh" \
+  "$REPO_ROOT/docker/seed-runtime.sh" \
+  "$REPO_ROOT/docker/seed-fixtures.sh" \
+  "$TMP_DIR/staged/"
+
+grep -Fq "COPY seed-data.sh seed-runtime.sh seed-fixtures.sh /" \
+  "$REPO_ROOT/docker/Dockerfile.seed"
+
 OUTPUT="$(
-  cd "$REPO_ROOT"
+  cd "$TMP_DIR/staged"
   CURL_LOG="$TMP_DIR/curl.log" \
     PATH="$TMP_DIR/bin:$PATH" \
     STREAMLINE_HOST="seed-test" \
     STREAMLINE_HTTP_PORT="19094" \
-    bash docker/seed-data.sh
+    ./seed-data.sh
 )"
 
 grep -Fq "Topics created:  4" <<<"$OUTPUT"
