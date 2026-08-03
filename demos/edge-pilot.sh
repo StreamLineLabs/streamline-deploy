@@ -30,7 +30,10 @@ echo "Step 1: Starting edge server + MQTT bridge..."
 docker compose -f "$COMPOSE" up -d streamline-edge
 echo "  Waiting for health..."
 for i in $(seq 1 30); do
-    curl -sf http://localhost:9094/health >/dev/null 2>&1 && break || sleep 1
+    if curl -sf http://localhost:9094/health >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
 done
 echo "  ✅ Edge server ready (Kafka:9092, HTTP:9094, MQTT:1883)"
 

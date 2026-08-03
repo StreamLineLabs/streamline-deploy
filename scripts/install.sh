@@ -11,7 +11,6 @@
 set -eu
 
 REPO="streamlinelabs/streamline"
-DEFAULT_VERSION="latest"
 PREFIX="${PREFIX:-/usr/local/bin}"
 VERSION=""
 
@@ -68,39 +67,38 @@ get_latest_version() {
 
 # Download and install binary
 install_binary() {
-    local name="$1"
-    local url="https://github.com/${REPO}/releases/download/v${VERSION}/${name}-${PLATFORM}"
+    binary_name="$1"
+    binary_url="https://github.com/${REPO}/releases/download/v${VERSION}/${binary_name}-${PLATFORM}"
 
     if [ "$OS" = "windows" ]; then
-        url="${url}.exe"
+        binary_url="${binary_url}.exe"
     fi
 
-    echo "  Downloading ${name}..."
-    local tmpfile
-    tmpfile="$(mktemp)"
+    echo "  Downloading ${binary_name}..."
+    binary_tmpfile="$(mktemp)"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$tmpfile" 2>/dev/null
+        curl -fsSL "$binary_url" -o "$binary_tmpfile" 2>/dev/null
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$url" -O "$tmpfile" 2>/dev/null
+        wget -q "$binary_url" -O "$binary_tmpfile" 2>/dev/null
     fi
 
-    if [ ! -s "$tmpfile" ]; then
-        echo "  ⚠ Failed to download ${name} (may not be available for ${PLATFORM})"
-        rm -f "$tmpfile"
+    if [ ! -s "$binary_tmpfile" ]; then
+        echo "  ⚠ Failed to download ${binary_name} (may not be available for ${PLATFORM})"
+        rm -f "$binary_tmpfile"
         return 1
     fi
 
-    chmod +x "$tmpfile"
+    chmod +x "$binary_tmpfile"
 
     if [ -w "$PREFIX" ]; then
-        mv "$tmpfile" "${PREFIX}/${name}"
+        mv "$binary_tmpfile" "${PREFIX}/${binary_name}"
     else
         echo "  Installing to ${PREFIX} (requires sudo)..."
-        sudo mv "$tmpfile" "${PREFIX}/${name}"
+        sudo mv "$binary_tmpfile" "${PREFIX}/${binary_name}"
     fi
 
-    echo "  ✓ Installed ${name} to ${PREFIX}/${name}"
+    echo "  ✓ Installed ${binary_name} to ${PREFIX}/${binary_name}"
 }
 
 main() {

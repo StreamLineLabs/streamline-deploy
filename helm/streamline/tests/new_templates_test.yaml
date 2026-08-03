@@ -38,7 +38,7 @@ tests:
         eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/streamline
     asserts:
       - equal:
-          path: metadata.annotations.eks\.amazonaws\.com/role-arn
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
           value: "arn:aws:iam::123456789:role/streamline"
 
   - it: should not create ServiceAccount when disabled
@@ -135,10 +135,10 @@ tests:
               pathType: Prefix
     asserts:
       - equal:
-          path: metadata.annotations.nginx\.ingress\.kubernetes\.io/proxy-body-size
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]
           value: "10m"
       - equal:
-          path: metadata.annotations.cert-manager\.io/cluster-issuer
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
           value: letsencrypt
 
   - it: should set correct backend service port

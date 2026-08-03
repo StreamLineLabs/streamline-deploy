@@ -12,4 +12,11 @@ jobs:
 
       - uses: azure/setup-helm@v4
 
-      - run: helm lint helm/streamline
+      - name: Install validation dependencies
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.2
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run complete validation
+        run: make test lint
