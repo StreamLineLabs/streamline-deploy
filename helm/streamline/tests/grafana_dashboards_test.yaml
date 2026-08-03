@@ -1,0 +1,56 @@
+suite: Streamline Grafana dashboards
+templates:
+  - grafana-dashboards.yaml
+
+tests:
+  - it: should create three dashboard ConfigMaps by default
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should create the overview dashboard
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-grafana-overview
+      - exists:
+          path: data["streamline-overview.json"]
+
+  - it: should create the consumer lag dashboard
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-grafana-consumer-lag
+      - exists:
+          path: data["streamline-consumer-lag.json"]
+
+  - it: should create the topics dashboard
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-grafana-topics
+      - exists:
+          path: data["streamline-topics.json"]
+
+  - it: should create no dashboards when metrics are disabled
+    set:
+      metrics.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create no dashboards when dashboard discovery is disabled
+    set:
+      metrics.grafanaDashboards.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

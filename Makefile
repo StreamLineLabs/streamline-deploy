@@ -1,4 +1,4 @@
-.PHONY: build test lint clean help docker helm-lint smoke-test helm-template helm-test helm-validate shell-syntax shellcheck
+.PHONY: build test lint clean help docker helm-lint smoke-test helm-template helm-test helm-validate shell-syntax shell-tests shellcheck
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -8,7 +8,7 @@ build: docker ## Build Docker image
 docker: ## Build Streamline Docker image
 	docker build -t streamline:dev .
 
-test: helm-lint helm-validate helm-test shell-syntax ## Run validation tests
+test: helm-lint helm-validate helm-test shell-syntax shell-tests ## Run validation tests
 	docker compose config --quiet
 	docker compose -f docker-compose.demo.yml config --quiet
 	docker compose -f docker-compose.test.yml config --quiet
@@ -45,6 +45,9 @@ helm-test: ## Run helm-unittest tests (requires helm-unittest plugin)
 
 shell-syntax: ## Validate tracked shell script syntax
 	@for file in $$(git ls-files '*.sh'); do bash -n "$$file"; done
+
+shell-tests: ## Run shell characterization tests
+	bash tests/seed-data_test.sh
 
 shellcheck: ## Run ShellCheck on tracked shell scripts
 	shellcheck $$(git ls-files '*.sh')
