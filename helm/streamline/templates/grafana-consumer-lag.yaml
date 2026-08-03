@@ -1,20 +1,9 @@
 {{- if and .Values.metrics.enabled .Values.metrics.grafanaDashboards.enabled -}}
-{{- $fullName := include "streamline.fullname" . -}}
-{{- $labels := include "streamline.labels" . -}}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $fullName }}-grafana-consumer-lag
-  namespace: {{ .Values.metrics.grafanaDashboards.namespace | default .Release.Namespace }}
-  labels:
-    {{- $labels | nindent 4 }}
-    grafana_dashboard: "1"
-    {{- with .Values.metrics.grafanaDashboards.labels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-  annotations:
-    grafana_folder: {{ .Values.metrics.grafanaDashboards.folder | default "Streamline" | quote }}
+  {{- include "streamline.grafanaDashboardMetadata" (dict "root" . "name" "consumer-lag") | nindent 2 }}
 data:
   streamline-consumer-lag.json: |-
     {

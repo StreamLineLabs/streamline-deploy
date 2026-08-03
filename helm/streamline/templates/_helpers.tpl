@@ -65,3 +65,20 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Shared metadata for Grafana dashboard ConfigMaps.
+Usage: include "streamline.grafanaDashboardMetadata" (dict "root" . "name" "overview")
+*/}}
+{{- define "streamline.grafanaDashboardMetadata" -}}
+name: {{ include "streamline.fullname" .root }}-grafana-{{ .name }}
+namespace: {{ .root.Values.metrics.grafanaDashboards.namespace | default .root.Release.Namespace }}
+labels:
+  {{- include "streamline.labels" .root | nindent 2 }}
+  grafana_dashboard: "1"
+  {{- with .root.Values.metrics.grafanaDashboards.labels }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+annotations:
+  grafana_folder: {{ .root.Values.metrics.grafanaDashboards.folder | default "Streamline" | quote }}
+{{- end }}
