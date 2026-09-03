@@ -1,7 +1,16 @@
-# Streamline Edge Appliance Configuration
+# Streamline Edge Appliance Configuration — UNSUPPORTED REFERENCE
 #
-# Optimized for resource-constrained edge devices (Raspberry Pi, IoT gateways).
-# See docs at https://streamlinelabs.dev/docs/operations/edge-deployment
+# This file is baked into Dockerfile.edge, which is itself an unsupported
+# reference build: nothing in this repository builds, publishes, runs or tests
+# an edge image. The [edge] and [mqtt] sections below describe behaviour that
+# is NOT verified against Streamline core — no smoke test, conformance run or
+# published image demonstrates an MQTT listener on 1883, a store-and-forward
+# buffer or a cloud-sync loop.
+#
+# Both sections therefore ship DISABLED. Turning them on would make a
+# reference image advertise listeners nobody has confirmed exist. Re-enable
+# them only together with a test that proves the behaviour
+# (tests/edge-unsupported_test.sh keeps the shipped defaults off).
 
 # --- Server ---
 [server]
@@ -26,9 +35,10 @@ ring_buffer_enabled = true
 default_compression = "zstd"
 compression_level = 3
 
-# --- Edge Configuration ---
+# --- Edge Configuration (UNSUPPORTED, disabled) ---
 [edge]
-enabled = true
+# Disabled: edge mode is unverified against core. See the header.
+enabled = false
 edge_id = "${STREAMLINE_EDGE_ID:-edge-default}"
 
 # Sync mode: auto (sync when connected), manual, scheduled
@@ -53,9 +63,11 @@ conflict_resolution = "timestamp-wins"
 # Bandwidth-aware compression: auto-selects codec based on connection speed
 adaptive_compression = true
 
-# --- MQTT Bridge ---
+# --- MQTT Bridge (UNSUPPORTED, disabled) ---
 [mqtt]
-enabled = true
+# Disabled: no verified Streamline build opens an MQTT listener, so neither
+# this image nor any compose stack in this repository binds 1883.
+enabled = false
 listen_addr = "0.0.0.0:1883"
 max_connections = 1000
 keep_alive_secs = 60

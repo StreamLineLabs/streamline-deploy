@@ -1,4 +1,12 @@
 # Streamline Prometheus Alerting Rules
+#
+# ⚠️  METRIC NAMES ARE UNVERIFIED. None of the streamline_* metrics used below
+# has been confirmed against the metrics Streamline core actually emits (audit
+# finding DEP-D-1). An alert whose metric is never emitted can never fire.
+# See monitoring/METRICS.md for the contract, the known conflicting name
+# variants, and how to verify against a running server before relying on these
+# rules in production.
+#
 # Import into Prometheus: prometheus.yml → rule_files: ["alerts.yml"]
 
 groups:
@@ -11,9 +19,10 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "High produce latency (p99 > 100ms)"
           description: "Produce p99 latency is {{ $value | humanizeDuration }} on {{ $labels.instance }}."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/high-latency"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/high-latency"
 
       - alert: StreamlineHighFetchLatency
         expr: histogram_quantile(0.99, rate(streamline_fetch_latency_seconds_bucket[5m])) > 0.2
@@ -21,9 +30,10 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "High fetch latency (p99 > 200ms)"
           description: "Fetch p99 latency is {{ $value | humanizeDuration }} on {{ $labels.instance }}."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/high-latency"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/high-latency"
 
       # --- Consumer Lag Alerts ---
       - alert: StreamlineConsumerLagHigh
@@ -32,9 +42,10 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Consumer group lag exceeds 10,000 messages"
           description: "Group {{ $labels.group }} on topic {{ $labels.topic }} partition {{ $labels.partition }} has lag of {{ $value }}."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/consumer-lag"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/consumer-lag"
 
       - alert: StreamlineConsumerLagCritical
         expr: streamline_consumer_group_lag > 100000
@@ -42,9 +53,10 @@ groups:
         labels:
           severity: critical
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Consumer group lag exceeds 100,000 messages"
           description: "Group {{ $labels.group }} on topic {{ $labels.topic }} has critical lag of {{ $value }}."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/consumer-lag"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/consumer-lag"
 
       # --- Disk Usage Alerts ---
       - alert: StreamlineDiskUsageHigh
@@ -53,9 +65,10 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Disk usage above 80%"
           description: "Storage on {{ $labels.instance }} is {{ $value | humanizePercentage }} full."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/disk-full"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/disk-full"
 
       - alert: StreamlineDiskUsageCritical
         expr: (streamline_storage_bytes / streamline_storage_capacity_bytes) > 0.95
@@ -63,9 +76,10 @@ groups:
         labels:
           severity: critical
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Disk usage above 95%"
           description: "Storage on {{ $labels.instance }} is {{ $value | humanizePercentage }} full. Immediate action required."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/disk-full"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/disk-full"
 
       # --- Connection Alerts ---
       - alert: StreamlineConnectionsNearLimit
@@ -74,6 +88,7 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Active connections approaching limit (>8000 of 10000)"
           description: "{{ $value }} active connections on {{ $labels.instance }}."
 
@@ -84,9 +99,10 @@ groups:
         labels:
           severity: critical
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Streamline server is down"
           description: "{{ $labels.instance }} has been unreachable for more than 1 minute."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/node-failure"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/node-failure"
 
       # --- Throughput Alerts ---
       - alert: StreamlineProduceThroughputDrop
@@ -95,6 +111,7 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Produce throughput dropped >50% from 1h average"
           description: "Current rate: {{ $value | humanize }} msg/s on {{ $labels.instance }}."
 
@@ -105,9 +122,10 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Streamline using more than 4GB RSS memory"
           description: "{{ $labels.instance }} is using {{ $value | humanize1024 }}B of memory."
-          runbook_url: "https://streamline.dev/docs/operations/runbooks/memory-exhaustion"
+          runbook_url: "https://streamlinelabs.dev/docs/operations/runbooks/memory-exhaustion"
 
       # --- Partition Skew Alerts ---
       - alert: StreamlinePartitionSkew
@@ -116,6 +134,7 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Partition skew detected (largest partition >3x average)"
           description: "Topic {{ $labels.topic }} has uneven partition sizes. Consider rebalancing or adjusting partition keys."
 
@@ -126,6 +145,7 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Under-replicated partitions detected"
           description: "{{ $value }} partitions on {{ $labels.instance }} are under-replicated."
 
@@ -135,6 +155,7 @@ groups:
         labels:
           severity: critical
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Replication lag exceeds 30 seconds"
           description: "Replica on {{ $labels.instance }} has {{ $value }}ms replication lag."
 
@@ -145,5 +166,6 @@ groups:
         labels:
           severity: warning
         annotations:
+          metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
           summary: "Elevated transaction timeout rate"
           description: "{{ $value | humanize }} transaction timeouts/sec on {{ $labels.instance }}."

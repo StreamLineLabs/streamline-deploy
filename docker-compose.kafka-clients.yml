@@ -1,8 +1,12 @@
 # Multi-language Kafka client demo
 # Proves that standard Kafka clients work with Streamline unchanged.
 #
+# No Streamline image is published yet, so there is no runnable default image.
+# Build one from the pinned core commit first (`scripts/prepare-core-context.sh`
+# then `make docker`, which produces streamline:dev).
+#
 # Usage:
-#   docker compose -f docker-compose.kafka-clients.yml up
+#   STREAMLINE_IMAGE=streamline:dev docker compose -f docker-compose.kafka-clients.yml up
 #
 # What happens:
 #   1. Streamline starts in playground mode with demo topics
@@ -13,9 +17,7 @@
 
 services:
   streamline:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-clients-demo
     ports:
       - "9092:9092"

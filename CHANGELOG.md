@@ -15,11 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restrict official image publication to `linux/amd64` until every additional
   architecture has its own pre-promotion smoke and vulnerability scan lane;
   an unvalidated arm64 manifest is no longer promoted under public tags.
+- Correct the disabled moonshot demo's build instructions to use the `custom`
+  edition with explicit `moonshot` capabilities, matching the Dockerfile guard.
 
 ### Added
+- Release gates for the governance review: `tests/core-pin-gate_test.sh`,
+  `tests/publish-pipeline_test.sh`, `tests/published-artifacts_test.sh`,
+  `tests/image-editions_test.sh`, `tests/tls-scope_test.sh`,
+  `tests/listener-ports_test.sh`, `tests/playground-image_test.sh`,
+  `tests/edge-unsupported_test.sh` and `tests/cdc-demo-disabled_test.sh`, all
+  wired into `make static` (and individually runnable as make targets). They are
+  hermetic: text/JSON inspection plus this repository's own scripts, with no
+  cluster, registry, network or docker.
 - `STREAMLINE_CAPABILITIES` build arg and `dev.streamline.capabilities` image
   label: a `custom` edition must declare what it supports, and the Helm chart's
   `image.capabilities` mirrors that declaration.
+- `demos/cdc-demo.sh`: the documented entry point for the CDC demo, which exits
+  non-zero and explains why the pipeline is disabled.
+- `cdc-demo/README.md`: records that `cdc-source.json` is an unverified shape
+  sketch rather than a working request body.
 - `helm/streamline/tests/values/test-image.yaml`: the explicit image every chart
   unit test now names, because the chart ships no default tag.
 - `core-source.env` and `scripts/prepare-core-context.sh`: the official image is
@@ -37,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release gates: image build + smoke test in CI, `make static` (build-context,
   single-publisher and metric-contract checks) and characterization tests for
   the installer and the core-context script.
+- `make compose-config` validates that every Compose stack parses, without
+  pulling or running anything, and stops at the first invalid file. Wired into
+  `make test`; `tests/makefile-compose-gate_test.sh` and
+  `tests/moonshot-demo_test.sh` join `make static`.
+- `tests/feature-gated-demos_test.sh` (`make feature-demo-claims`, part of
+  `make static`): a hermetic gate that fails if any `docker-compose*.yml` sets a
+  runtime feature variable, and that holds every feature-gated demo (CDC,
+  moonshot, edge) to an explicitly supplied image with a local-only default and
+  a documented build, cross-checked against the Dockerfile that produces it.
+- `monitoring/METRICS.md`: metric contract recording that every `streamline_*`
+  name used by dashboards and alerts is unverified against core.
 - `release.yml` packages and checksums the Helm chart as a workflow artifact
   (no external publication).
 
@@ -64,9 +89,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ends in `|| true`, the created topic must appear in `topics list`, the produce
   and consume assertions must both execute, and the health wait is bounded so a
   server that never starts fails the run rather than hanging it.
+- **Nothing presents an unpublished artifact as installable.** No image or chart
+  has ever been pushed, yet the artifacts told readers to `docker pull
+  ghcr.io/streamlinelabs/streamline:0.3.0`, defaulted every Compose stack to it,
+  pinned it in the raw manifests and shipped it as the chart's `image.tag`. Every
+  Compose stack now takes its Streamline image from a variable with a local-only,
+  unpullable default; `k8s/` carries `streamline:set-image-before-apply`; the
+  chart ships `image.tag: ""` and fails the render with an explanation; and the
+  READMEs lead with a source build from the pinned core context. No version
+  string was changed (`tests/published-artifacts_test.sh`).
+- **`STREAMLINE_EDITION=full` accepts only `STREAMLINE_FEATURES=full`.** Any
+  non-empty list used to be accepted, minting images labelled `full` that cargo
+  had never compiled auth into while the chart happily rendered an authenticated
+  configuration onto them. Arbitrary lists are now `STREAMLINE_EDITION=custom`
+  and must declare `STREAMLINE_CAPABILITIES` (`auth`, `clustering`, `moonshot` or
+  `none`). The chart follows: `image.capabilities` is required for `custom`,
+  rejected for `standard`/`full`, and no capability is ever inferred for a custom
+  build (`tests/image-editions_test.sh`, which executes the Dockerfile guard).
+- **TLS is documented as Kafka-only.** The chart's TLS settings configure the
+  Kafka protocol listener (9092); the HTTP API on 9094 keeps serving plaintext
+  HTTP — the probes reach it that way — and nothing asks an HTTP client for a
+  certificate. The docs claimed "TLS on both Kafka and HTTP ports" and described
+  the Secret as securing the API. Templates and environment variables are
+  unchanged and now explicitly named as Kafka TLS; HTTPS for the HTTP API is an
+  ingress/reverse-proxy concern (`tests/tls-scope_test.sh`).
+- **Listener ports are fixed at 9092/9094.** `service.kafkaPort`,
+  `service.httpPort`, `externalService.kafkaPort`, `config.kafkaAddr`,
+  `config.httpAddr` and `config.interBrokerPort` looked adjustable but reached
+  only some of the wiring, so a custom value produced a Service pointing at a
+  port nothing served and probes aimed at the old one. They are now rejected by
+  `values.schema.json` before render and again by the chart, and
+  `networkPolicy.ingress` may only name ports the workload serves
+  (`tests/listener-ports_test.sh`).
+- `playground/Dockerfile` creates and chowns `/data` before dropping to UID 1000
+  and sets `STREAMLINE_DATA_DIR=/data`, with an explicit `CMD` naming that
+  directory. A non-root container cannot create it at run time, so any write
+  killed the container with a permission error
+  (`tests/playground-image_test.sh`).
 - The retained future-release logic in `scripts/install.sh` filters the
   requested libc *before* resolving uniqueness. A musl-only release cannot
   satisfy a GNU request, and checksum verification remains mandatory.
+- `k8s/README.md` documents the real build: prepare the pinned core context
+  (`scripts/prepare-core-context.sh` / `make core-context`) and run
+  `docker build -f Dockerfile .build/core`. `docker build -t … .` from this
+  repository has never worked — there are no Rust sources here — and
+  `tests/dockerfile-context_test.sh` now sweeps the docs for that instruction.
+- `helm lint` (Makefile and `release.yml`) and the chart unit tests pass an
+  explicit test image, since the chart refuses to render without one.
+- `make smoke-test-published` became `make smoke-test-image`: there is no
+  published image to smoke-test, so the target requires `STREAMLINE_IMAGE`.
 - `docker-publish.yml` is the single image publisher; it runs on release tags
   only, serializes with a concurrency group and no longer publishes `latest`
   from branch pushes.
@@ -74,6 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   because no controlled installer endpoint or verified release archive set
   exists. Its retained release-resolution logic still requires SHA-256
   verification and has no bypass flag.
+- Compose stacks and Kubernetes manifests reference pinned image tags.
 - TLS is no longer capability-gated: Streamline core compiles it into every
   build, so `tls.enabled` works with any edition, including a custom `standard`
   build. `"tls"` inside `image.capabilities` is accepted and ignored.
@@ -101,8 +173,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `k8s/keda/` is marked `UNSUPPORTED EXAMPLE — DO NOT APPLY` and documented as
   such in `k8s/README.md`. It stays out of `k8s/kustomization.yaml`, so
   `kubectl apply -k k8s/` never creates it.
+- `tests/scaling-claims_test.sh` (new, hermetic; wired into `make static`)
+  fails when the raw ConfigMap omits `STREAMLINE_AUTO_CREATE_TOPICS`, when an
+  artifact recommends more than one broker without marking it unsupported, when
+  a chart autoscaler guard is removed, or when the KEDA example loses its
+  unsupported marker.
 
 ### Removed
+- `docker-compose.edge.yml` and the runnable edge pilot. The MQTT bridge on
+  `:1883`, store-and-forward and cloud sync are unverified against core — no
+  smoke test, conformance run or published image exercises them — and no
+  `streamline-edge` tag has ever been built or pushed. `demos/edge-pilot.sh` now
+  exits non-zero without touching Docker, `Dockerfile.edge` is an explicitly
+  unsupported source reference that no longer exposes 1883, and
+  `docker/edge/streamline-edge.toml` ships its `[edge]` and `[mqtt]` sections
+  disabled (`tests/edge-unsupported_test.sh`).
+- The runnable CDC demo. Its source-registration route, request body, start
+  route, message-read path and StreamQL endpoint came from documentation rather
+  than from a server anyone ran here, and `cdc`/`analytics` are compile-time
+  features no published image is built with. Every service in
+  `docker-compose.cdc-demo.yml` now sits behind the `disabled` Compose profile,
+  the image default is an unpullable placeholder, and no artifact may present
+  `/api/v1/cdc/sources` or `/sql` as a runnable instruction
+  (`tests/cdc-demo-disabled_test.sh`).
 - `auth.sasl.username`, `auth.sasl.password`, `auth.usernameKey`,
   `auth.passwordKey` and `auth.extraSecrets`. Streamline core authenticates
   against a YAML users file containing precomputed hashes / SCRAM credentials,
@@ -132,6 +225,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settings. Any `moonshot.*.enabled: true` now fails the render, and
   `image.capabilities: [moonshot]` no longer implies the chart can configure
   them.
+- The `docker-compose.yml` header referenced a Docker Hub image that no workflow
+  publishes; it now names the `ghcr.io` tags the single publisher pushes
+  (`tests/workflow-publisher_test.sh` gates this).
+- `docker-compose.moonshot-demo.yml` no longer advertises features its image
+  cannot have. It defaulted to the published tag while claiming a "full-edition
+  image built with the moonshot features" supplied them, and set
+  `STREAMLINE_FEATURES` in the container environment. The publisher builds
+  `STREAMLINE_FEATURES=full` (SASL auth and clustering), the moonshot features
+  are compile-time cargo features, and core reads no `STREAMLINE_FEATURES`
+  variable — so `docker compose up` started a stock server with none of the
+  advertised features and nothing said so. The stack now fails closed: both
+  services take `${STREAMLINE_MOONSHOT_IMAGE}`, whose default is a local-only
+  placeholder tag that exists in no registry, the runtime feature variable is
+  gone, and the header documents building the image with
+  `--build-arg STREAMLINE_FEATURES=moonshot` from the pinned core context.
+  `docker compose config` stays valid with no environment set, so
+  `make compose-config` still validates the stack without pulling or running
+  anything (`tests/moonshot-demo_test.sh` gates this).
+- `docker-compose.cdc-demo.yml` no longer advertises features its image cannot
+  have, for the same reason. It defaulted to the published tag and set
+  `STREAMLINE_FEATURES=cdc,analytics` in the container environment; core reads
+  no such variable and `cdc`/`analytics` are compile-time cargo features, so
+  `docker compose up` started a stock server whose `/api/v1/cdc/sources` and
+  `/sql` endpoints — the whole demo — do not exist, and nothing said so. The
+  stack now fails closed: the Streamline service takes
+  `${STREAMLINE_CDC_IMAGE}`, whose default is a local-only placeholder tag that
+  exists in no registry, the runtime feature variable is gone, and the header
+  documents building the image with `--build-arg STREAMLINE_FEATURES=cdc,analytics`
+  from the pinned core context. `docker compose config` stays valid with no
+  environment set (`tests/feature-gated-demos_test.sh` gates this).
+- `docker-compose.edge.yml` no longer defaults to an image nobody publishes. It
+  declared "this stack runs a published image" and defaulted to
+  `ghcr.io/streamlinelabs/streamline-edge:0.3.0`, but the single publisher
+  (`.github/workflows/docker-publish.yml`) builds `Dockerfile` and pushes
+  `ghcr.io/streamlinelabs/streamline` only — no workflow has ever built or
+  pushed an edge tag, so `docker compose up` and `demos/edge-pilot.sh` failed on
+  an unresolvable manifest while the file promised a supported image. The stack
+  now fails closed on the same contract as the CDC and moonshot demos: the
+  appliance takes `${STREAMLINE_EDGE_IMAGE}`, whose default is a local-only
+  placeholder tag that exists in no registry, and the header documents the real
+  build — `scripts/prepare-core-context.sh` plus
+  `docker build -f Dockerfile.edge .build/core` — including that
+  `Dockerfile.edge` takes no `STREAMLINE_FEATURES` build arg because it compiles
+  the fixed `compression,edge` cargo features. `demos/edge-pilot.sh` now refuses
+  to start without the variable and prints the build instead.
+  `tests/feature-gated-demos_test.sh` gained an `edge` row, so a registry
+  default or a runtime feature claim in this stack fails `make static`; the
+  table now also cross-checks each demo's feature list against the Dockerfile
+  that builds it, so a row cannot document a build flag that does not exist.
+- `make test` validated every `docker-compose*.yml` in a shell `for` loop
+  without `|| exit 1`. A loop reports the status of its last iteration only, so
+  an invalid stack anywhere but the alphabetically last file left `make test`
+  green — `docker-compose.cdc-demo.yml` through `docker-compose.kafka-clients.yml`
+  could all have been broken without CI noticing. The loop moved into a
+  `compose-config` target that stops at the first invalid file, and
+  `tests/makefile-compose-gate_test.sh` evaluates the recipe from the Makefile
+  itself against a stubbed `docker` to prove a non-last failure is no longer
+  masked.
 - `config.extraArgs` documentation, default examples and tests used the
   non-existent flags `--features` and `--max-message-size`; they now show
   `--max-message-bytes` only.
@@ -155,8 +306,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a non-existent top-level `extraArgs`).
 - `scripts/install.sh` no longer falls back to a hard-coded `0.2.0` when the
   latest version cannot be resolved.
+- Removed the duplicate, syntactically invalid `docker/Dockerfile.release` and
+  the unreferenced `docker/Dockerfile.optimized`.
+- `docker-compose.moonshot-demo.yml`: seeder loop variables are escaped for
+  Compose interpolation and the CLI targets the server container.
+- `Dockerfile.edge` and `playground/Dockerfile` compile Streamline core but
+  still copied `Cargo.toml`, `crates/` and `src/` from this repository, which
+  has never contained them; `docker-compose.edge.yml` built the edge image with
+  `context: .`. Both now build from the prepared core context, fail closed when
+  the context is not a core checkout, and build with `--locked`. The edge
+  appliance config reaches the context through a namespaced `.deploy/` overlay
+  written by `scripts/prepare-core-context.sh`.
+- `playground/Dockerfile` declared a `curl` HEALTHCHECK without installing
+  `curl`, so the container could only ever report unhealthy. It now installs
+  `curl` and runs as the non-root user the other images use.
+- `make static` now runs the metric-contract gate it was already documented as
+  running.
 - `scripts/prepare-core-context.sh --help` derived its output from a hard-coded
   line range and silently truncated the option list when the header grew.
+- Documentation drift: supported versions, security contact, chart defaults, and
+  the half-merged capability bullet in `CLAUDE.md`.
 
 
 ## [0.3.0] - 2026-04-20

@@ -1,4 +1,11 @@
 # Playground Controller - Manages ephemeral Streamline instances
+#
+# UNSUPPORTED EXAMPLE — DO NOT APPLY AS-IS.
+# Neither image referenced below exists: this repository builds and publishes no
+# playground-controller image at all (there is no Dockerfile for one here), and
+# no Streamline image is published yet either. Both references are therefore
+# deliberately unpullable placeholders rather than release tags nobody has
+# pushed. Supply your own images before applying anything in this directory.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,7 +26,9 @@ spec:
       serviceAccountName: playground-controller
       containers:
         - name: controller
-          image: ghcr.io/streamlinelabs/playground-controller:latest
+          # No playground-controller image is built or published by this
+          # repository; set a real reference before applying.
+          image: playground-controller:set-image-before-apply
           ports:
             - containerPort: 8080
               name: http
@@ -29,7 +38,9 @@ spec:
             - name: INSTANCE_TTL_MINUTES
               value: "30"
             - name: STREAMLINE_IMAGE
-              value: "ghcr.io/streamlinelabs/streamline:0.3.0"
+              # No Streamline image is published yet — build one from the
+              # pinned core commit and name it here.
+              value: "streamline:set-image-before-apply"
             - name: INSTANCE_MEMORY_LIMIT
               value: "256Mi"
             - name: INSTANCE_CPU_LIMIT

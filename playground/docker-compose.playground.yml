@@ -1,17 +1,35 @@
-# Local playground for development
-version: "3.8"
+# Local playground for development.
+#
+# No Streamline image is published yet, so this stack has no runnable default
+# image. Build one from the pinned core commit and name it:
+#
+#   scripts/prepare-core-context.sh
+#   docker build -f playground/Dockerfile .build/core \
+#     --build-arg STREAMLINE_CORE_REF="$(scripts/prepare-core-context.sh --print-ref)" \
+#     -t streamline-playground:dev
+#
+#   STREAMLINE_PLAYGROUND_IMAGE=streamline-playground:dev \
+#     docker compose -f docker-compose.playground.yml up -d
+#
+# The placeholder default below is local-only and matches nothing in any
+# registry, so `docker compose config` stays valid while `up` stops with an
+# explicit pull error instead of pretending a published tag exists.
 services:
   streamline:
-    image: ghcr.io/streamlinelabs/streamline:0.3.0
+    image: ${STREAMLINE_PLAYGROUND_IMAGE:-streamline-playground:set-STREAMLINE_PLAYGROUND_IMAGE}
     ports:
       - "9092:9092"
       - "9094:9094"
-    command: >
-      streamline
-        --playground
-        --in-memory
-        --listen-addr 0.0.0.0:9092
-        --http-addr 0.0.0.0:9094
+    # The image ENTRYPOINT is already the `streamline` binary, so this list
+    # carries flags only — repeating the binary name here passed "streamline"
+    # to itself as an argument.
+    command:
+      - --playground
+      - --in-memory
+      - --listen-addr
+      - 0.0.0.0:9092
+      - --http-addr
+      - 0.0.0.0:9094
     environment:
       STREAMLINE_LOG_LEVEL: info
     healthcheck:
@@ -19,4 +37,3 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
