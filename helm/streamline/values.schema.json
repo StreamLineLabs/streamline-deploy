@@ -16,22 +16,54 @@
         },
         "tag": {
           "type": "string",
-          "description": "Container image tag"
+          "description": "Container image tag. REQUIRED and shipped empty: no Streamline image is published yet, so the chart fails the render until you name an image you can pull (build one from the pinned core commit with scripts/prepare-core-context.sh and `make docker`)."
         },
         "pullPolicy": {
           "type": "string",
-          "enum": ["Always", "IfNotPresent", "Never"],
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ],
           "description": "Image pull policy"
+        },
+        "edition": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "full",
+            "custom"
+          ],
+          "description": "Edition of the image, mirroring the STREAMLINE_EDITION build arg: \"standard\" (default cargo features, no optional capabilities), \"full\" (STREAMLINE_FEATURES=full: auth and clustering) or \"custom\" (arbitrary feature list; image.capabilities must declare what it supports and nothing is inferred)."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "tls",
+              "auth",
+              "clustering",
+              "moonshot",
+              "none"
+            ]
+          },
+          "description": "Explicit capability list for a custom image. Accepted only with edition \"custom\", where it is required — the chart never infers auth or clustering from an arbitrary feature list. \"tls\" is accepted for backwards compatibility and ignored because TLS is compiled into every build. \"moonshot\" only describes what the image contains: the chart does not wire moonshot settings, so enabling them still fails the render."
         }
       },
-      "required": ["repository", "tag"]
+      "required": [
+        "repository",
+        "tag"
+      ]
     },
     "imagePullSecrets": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "name": { "type": "string" }
+          "name": {
+            "type": "string"
+          }
         }
       },
       "description": "Image pull secrets"
@@ -49,7 +81,13 @@
       "properties": {
         "logLevel": {
           "type": "string",
-          "enum": ["trace", "debug", "info", "warn", "error"],
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
           "description": "Server log level"
         },
         "dataDir": {
@@ -58,13 +96,43 @@
         },
         "kafkaAddr": {
           "type": "string",
-          "pattern": "^[^:]+:[0-9]+$",
-          "description": "Kafka protocol listen address (host:port)"
+          "pattern": "^[^:]+:9092$",
+          "description": "Kafka protocol listen address (host:9092). The port is fixed: the container port, probes, Services and NetworkPolicy all hard-code 9092."
         },
         "httpAddr": {
           "type": "string",
-          "pattern": "^[^:]+:[0-9]+$",
-          "description": "HTTP API listen address (host:port)"
+          "pattern": "^[^:]+:9094$",
+          "description": "HTTP API listen address (host:9094). The port is fixed for the same reason as kafkaAddr."
+        },
+        "autoCreateTopics": {
+          "type": "boolean",
+          "description": "Auto-create topics on first produce. Always rendered as STREAMLINE_AUTO_CREATE_TOPICS (\"true\"/\"false\") because Streamline core enables it by default."
+        },
+        "playground": {
+          "type": "boolean",
+          "description": "Start in playground mode with demo topics"
+        },
+        "ephemeral": {
+          "type": "boolean",
+          "description": "Keep all data in memory only"
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra CLI arguments appended to the server command line; only flags the pinned image accepts (e.g. --max-message-bytes)"
+        },
+        "clusterEnabled": {
+          "type": "boolean",
+          "description": "Enable multi-node clustering (requires an image with the clustering capability)"
+        },
+        "interBrokerPort": {
+          "type": "integer",
+          "enum": [
+            9093
+          ],
+          "description": "Inter-broker replication port. Fixed at 9093: the headless Service and the container port hard-code it, and clustering is rejected by this chart anyway."
         }
       },
       "description": "Streamline server configuration"
@@ -74,27 +142,36 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ],
           "description": "Kubernetes service type"
         },
         "kafkaPort": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "description": "Kafka protocol port"
+          "enum": [
+            9092
+          ],
+          "description": "Kafka protocol port. Fixed at 9092; the container port, probes, NetworkPolicy and Services are hard-coded, so any other value would point the Service at a port nothing serves. Expose a different port outside the pod instead."
         },
         "httpPort": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "description": "HTTP API port"
+          "enum": [
+            9094
+          ],
+          "description": "HTTP API port. Fixed at 9094 for the same reason as kafkaPort."
         },
         "annotations": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Service annotations"
         }
-      }
+      },
+      "description": "Internal Service. The listener ports are fixed at 9092/9094 and rejected before render if changed."
     },
     "externalService": {
       "type": "object",
@@ -105,17 +182,24 @@
         },
         "type": {
           "type": "string",
-          "enum": ["LoadBalancer", "NodePort"],
+          "enum": [
+            "LoadBalancer",
+            "NodePort"
+          ],
           "description": "External service type"
         },
         "kafkaPort": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 65535
+          "enum": [
+            9092
+          ],
+          "description": "External Kafka port. Fixed at 9092: it targets the same fixed container port."
         },
         "annotations": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -132,7 +216,11 @@
         },
         "accessMode": {
           "type": "string",
-          "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"],
+          "enum": [
+            "ReadWriteOnce",
+            "ReadWriteMany",
+            "ReadOnlyMany"
+          ],
           "description": "PVC access mode"
         },
         "size": {
@@ -142,7 +230,9 @@
         },
         "annotations": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -152,15 +242,23 @@
         "requests": {
           "type": "object",
           "properties": {
-            "memory": { "type": "string" },
-            "cpu": { "type": "string" }
+            "memory": {
+              "type": "string"
+            },
+            "cpu": {
+              "type": "string"
+            }
           }
         },
         "limits": {
           "type": "object",
           "properties": {
-            "memory": { "type": "string" },
-            "cpu": { "type": "string" }
+            "memory": {
+              "type": "string"
+            },
+            "cpu": {
+              "type": "string"
+            }
           }
         }
       },
@@ -169,23 +267,35 @@
     "podSecurityContext": {
       "type": "object",
       "properties": {
-        "fsGroup": { "type": "integer" },
-        "runAsNonRoot": { "type": "boolean" },
-        "runAsUser": { "type": "integer" }
+        "fsGroup": {
+          "type": "integer"
+        },
+        "runAsNonRoot": {
+          "type": "boolean"
+        },
+        "runAsUser": {
+          "type": "integer"
+        }
       },
       "description": "Pod-level security context"
     },
     "securityContext": {
       "type": "object",
       "properties": {
-        "allowPrivilegeEscalation": { "type": "boolean" },
-        "readOnlyRootFilesystem": { "type": "boolean" },
+        "allowPrivilegeEscalation": {
+          "type": "boolean"
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean"
+        },
         "capabilities": {
           "type": "object",
           "properties": {
             "drop": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
@@ -206,17 +316,100 @@
     },
     "nodeSelector": {
       "type": "object",
-      "additionalProperties": { "type": "string" },
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "Node selector constraints"
     },
     "tolerations": {
       "type": "array",
-      "items": { "type": "object" },
+      "items": {
+        "type": "object"
+      },
       "description": "Pod tolerations"
     },
     "affinity": {
       "type": "object",
       "description": "Pod affinity rules"
+    },
+    "autoscaling": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Not supported by this chart; true fails the render. An HPA raises the StatefulSet replica count past 1, which needs peer bootstrap."
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Documented shape only; the HPA never renders while autoscaling is rejected"
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Documented shape only; the HPA never renders while autoscaling is rejected"
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Documented shape only; the HPA never renders while autoscaling is rejected"
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Documented shape only; the HPA never renders while autoscaling is rejected"
+        },
+        "additionalMetrics": {
+          "type": "array",
+          "description": "Documented shape only; the HPA never renders while autoscaling is rejected"
+        }
+      },
+      "description": "Horizontal Pod Autoscaler. Horizontal scaling is not supported yet: an autoscaler edits the StatefulSet replica count directly and would bypass the replicaCount > 1 guard, starting independent brokers instead of cluster members. autoscaling.enabled=true fails the render."
+    },
+    "keda": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Not supported by this chart; true fails the render. A ScaledObject scales the StatefulSet past 1 replica, which needs peer bootstrap."
+        },
+        "pollingInterval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Documented shape only; the ScaledObject never renders while KEDA scaling is rejected"
+        },
+        "cooldownPeriod": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Documented shape only; the ScaledObject never renders while KEDA scaling is rejected"
+        },
+        "idleReplicaCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Documented shape only; the ScaledObject never renders while KEDA scaling is rejected"
+        },
+        "minReplicaCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Documented shape only; the ScaledObject never renders while KEDA scaling is rejected"
+        },
+        "maxReplicaCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Documented shape only; the ScaledObject never renders while KEDA scaling is rejected"
+        },
+        "triggers": {
+          "type": "array",
+          "description": "Documented shape only; the ScaledObject never renders while KEDA scaling is rejected"
+        }
+      },
+      "description": "KEDA event-driven autoscaling. Rejected for the same reason as autoscaling: scaling the StatefulSet past one replica produces independent brokers, not a cluster. keda.enabled=true fails the render."
     },
     "podDisruptionBudget": {
       "type": "object",
@@ -256,7 +449,9 @@
             },
             "labels": {
               "type": "object",
-              "additionalProperties": { "type": "string" }
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           }
         }
@@ -266,7 +461,127 @@
       "type": "integer",
       "minimum": 0,
       "description": "Graceful shutdown timeout in seconds"
+    },
+    "tls": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable TLS on the Kafka protocol listener (9092). The HTTP API on 9094 is not covered: terminate HTTPS for it at an ingress, reverse proxy or service mesh."
+        },
+        "certData": {
+          "type": "string",
+          "description": "Base64-encoded PEM certificate for the Kafka listener"
+        },
+        "keyData": {
+          "type": "string",
+          "description": "Base64-encoded PEM private key for the Kafka listener"
+        },
+        "caData": {
+          "type": "string",
+          "description": "Base64-encoded PEM CA certificate used to verify Kafka client certificates"
+        },
+        "existingSecret": {
+          "type": "string",
+          "description": "Existing kubernetes.io/tls Secret to mount instead of generating one. It secures the Kafka listener only; it is not an HTTPS certificate for the HTTP API."
+        },
+        "mountPath": {
+          "type": "string",
+          "description": "Mount path for the certificate material"
+        },
+        "clientAuth": {
+          "type": "boolean",
+          "description": "Require client certificates from Kafka clients (mTLS on 9092); needs CA material. HTTP clients are never asked for a certificate."
+        }
+      },
+      "description": "TLS for the Kafka protocol listener. Needs no image capability: TLS is compiled into every Streamline build. It does not secure the HTTP API on 9094."
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable SASL authentication (requires auth.existingSecret)"
+        },
+        "sasl": {
+          "type": "object",
+          "properties": {
+            "mechanisms": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PLAIN",
+                  "SCRAM-SHA-256",
+                  "SCRAM-SHA-512"
+                ]
+              },
+              "description": "SASL mechanisms advertised to clients (STREAMLINE_AUTH_SASL_MECHANISMS)"
+            }
+          }
+        },
+        "existingSecret": {
+          "type": "string",
+          "description": "Existing Secret holding the YAML users file; required when auth.enabled is true"
+        },
+        "usersFileKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Key inside existingSecret holding the YAML users file (precomputed hashes / SCRAM credentials)"
+        },
+        "mountPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the users file is mounted read-only inside the container"
+        }
+      },
+      "description": "SASL authentication configuration (requires an image with the auth capability). Inline username/password are not supported; core reads a users file."
+    },
+    "moonshot": {
+      "type": "object",
+      "properties": {
+        "semanticTopics": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Not wired by this chart; true fails the render"
+            }
+          }
+        },
+        "agentMemory": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Not wired by this chart; true fails the render"
+            }
+          }
+        },
+        "contracts": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Not wired by this chart; true fails the render"
+            }
+          }
+        },
+        "branches": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Not wired by this chart; true fails the render"
+            }
+          }
+        }
+      },
+      "description": "Experimental moonshot features. This chart does not render any of these settings into the server configuration yet, so enabling one fails the render instead of deploying a server that ignores it. Declaring \"moonshot\" in image.capabilities does not make them take effect."
     }
   },
-  "required": ["replicaCount", "image"]
+  "required": [
+    "replicaCount",
+    "image"
+  ]
 }

@@ -1,0 +1,9 @@
+# Explicit test image for the chart's unit tests.
+#
+# The chart ships no default image.tag on purpose: no Streamline image is
+# published yet, so a default would point every install at a manifest nobody
+# pushed (helm/streamline/templates/_helpers.tpl → streamline.imageRef).
+# Tests therefore name an image explicitly, exactly as an operator must.
+image:
+  repository: streamline
+  tag: helm-unittest

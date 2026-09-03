@@ -35,12 +35,39 @@
   # List topics
   streamline-cli topics list
 
+{{- if .Values.tls.enabled }}
+
+🔒 Kafka TLS is enabled ({{ if .Values.tls.existingSecret }}existing Secret {{ .Values.tls.existingSecret }}{{ else }}chart-generated Secret {{ include "streamline.fullname" . }}-tls{{ end }}):
+  Certificate material is mounted read-only at {{ .Values.tls.mountPath | default "/etc/streamline/tls" }}
+  and passed to the server via STREAMLINE_TLS_CERT / STREAMLINE_TLS_KEY.
+  Scope: the Kafka protocol listener on port {{ .Values.service.kafkaPort }} only.
+  The HTTP API on port {{ .Values.service.httpPort }} still serves plaintext HTTP
+  (the probes above use it); terminate HTTPS for it at an ingress, reverse proxy
+  or service mesh.
+{{- if .Values.tls.clientAuth }}
+  Mutual TLS is on for Kafka clients (STREAMLINE_TLS_REQUIRE_CLIENT_CERT): they
+  must present a certificate signed by the CA in STREAMLINE_TLS_CA_CERT. HTTP
+  clients are not asked for a certificate.
+{{- end }}
+{{- end }}
+{{- if .Values.auth.enabled }}
+
+🔑 SASL authentication is enabled ({{ join ", " .Values.auth.sasl.mechanisms }}):
+  The users file from Secret {{ include "streamline.authSecretName" . }} (key
+  {{ include "streamline.authUsersFileKey" . }}) is mounted read-only and passed to
+  the server via STREAMLINE_AUTH_USERS_FILE={{ include "streamline.authUsersFilePath" . }}.
+  Rotate credentials by updating that Secret and restarting the StatefulSet.
+{{- end }}
 {{- if .Values.metrics.enabled }}
 
 📊 Metrics:
   Prometheus metrics are available at :{{ .Values.service.httpPort }}/metrics
 {{- if .Values.metrics.serviceMonitor.enabled }}
   A ServiceMonitor has been created for Prometheus Operator.
+{{- end }}
+{{- if .Values.metrics.prometheusRule.enabled }}
+  ⚠️  Alert rules use metric names that are unverified against Streamline core;
+      see monitoring/METRICS.md before relying on them.
 {{- end }}
 {{- end }}
 

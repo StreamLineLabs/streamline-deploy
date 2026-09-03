@@ -1,3 +1,9 @@
+{{- include "streamline.validateConfiguration" . -}}
+{{/*
+Unsupported: autoscaling.enabled=true fails in streamline.validateConfiguration
+until peer bootstrap exists, so this HPA can never render. The manifest is kept
+so the intended shape is reviewable alongside the guard.
+*/}}
 {{- if .Values.autoscaling.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

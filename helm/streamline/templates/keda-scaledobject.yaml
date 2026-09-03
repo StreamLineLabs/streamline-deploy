@@ -1,3 +1,9 @@
+{{- include "streamline.validateConfiguration" . -}}
+{{/*
+Unsupported: keda.enabled=true fails in streamline.validateConfiguration until
+peer bootstrap exists, so this ScaledObject can never render. The manifest is
+kept so the intended shape is reviewable alongside the guard.
+*/}}
 {{- if .Values.keda.enabled }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject

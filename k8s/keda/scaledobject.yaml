@@ -1,6 +1,14 @@
-# KEDA ScaledObject for Streamline auto-scaling
-# Enables event-driven scaling based on Streamline metrics
-# Requires KEDA v2.x installed in the cluster
+# UNSUPPORTED EXAMPLE — DO NOT APPLY
+#
+# KEDA ScaledObject for Streamline auto-scaling.
+# Streamline has no peer bootstrap yet, so scaling the StatefulSet past one
+# replica produces independent brokers with their own data, not a cluster.
+# Applying this object hands that decision to KEDA (including scale-to-zero),
+# which is why the Helm chart rejects keda.enabled=true outright and why this
+# directory is not referenced by k8s/kustomization.yaml.
+# It is kept to document the intended shape once clustered mode exists.
+# The metric names below are also unverified against core (monitoring/METRICS.md).
+# Requires KEDA v2.x installed in the cluster.
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:

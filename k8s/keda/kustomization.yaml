@@ -1,3 +1,7 @@
+# UNSUPPORTED EXAMPLE — DO NOT APPLY
+# This kustomization is deliberately not referenced by k8s/kustomization.yaml:
+# autoscaling the standalone broker creates independent brokers, not a cluster.
+# See k8s/README.md ("Autoscaling (k8s/keda/, unsupported)").
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

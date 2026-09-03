@@ -1,5 +1,7 @@
 # Streamline PodDisruptionBudget
-# Ensures high availability during cluster maintenance
+# Limits *voluntary* disruptions (node drains, evictions) of the standalone
+# broker. It is not high availability: with a single broker, an eviction or a
+# node failure is downtime — there is no replica to serve clients meanwhile.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -9,8 +11,8 @@ metadata:
     app.kubernetes.io/name: streamline
     app.kubernetes.io/component: availability
 spec:
-  # Ensure at least 1 pod is available during disruptions
-  # For 3-node cluster, this allows 2 pods to be unavailable
+  # Keep the single broker pod available across voluntary disruptions: a drain
+  # must wait for the pod to be rescheduled rather than evicting it eagerly.
   minAvailable: 1
   selector:
     matchLabels:

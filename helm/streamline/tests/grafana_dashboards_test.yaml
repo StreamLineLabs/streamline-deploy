@@ -4,6 +4,10 @@ templates:
   - grafana-consumer-lag.yaml
   - grafana-topics.yaml
 
+values:
+  # The chart ships no default image.tag (nothing is published yet), so every
+  # suite names an explicit test image — see tests/values/test-image.yaml.
+  - values/test-image.yaml
 tests:
   - it: should create one ConfigMap per dashboard template by default
     asserts:
@@ -20,6 +24,13 @@ tests:
           value: RELEASE-NAME-streamline-grafana-overview
       - exists:
           path: data["streamline-overview.json"]
+
+  - it: should mark dashboard metric names as unverified
+    template: grafana-overview.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["streamline.dev/metric-status"]
+          value: unverified
 
   - it: should create the consumer lag dashboard
     template: grafana-consumer-lag.yaml

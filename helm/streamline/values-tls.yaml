@@ -1,10 +1,37 @@
-# TLS configuration values for Streamline Helm chart
+# =============================================================================
+# Kafka TLS example values for the Streamline Helm chart
+# =============================================================================
+# Usage:
+#   kubectl create secret tls streamline-tls \
+#     --cert=server.crt --key=server.key            # add ca.crt for Kafka mTLS
+#   helm install streamline ./helm/streamline -f helm/streamline/values-tls.yaml \
+#     --set image.repository=<registry>/streamline --set image.tag=<tag>
+#
+# SCOPE: this configures the server's KAFKA protocol listener (port 9092).
+# The HTTP API on port 9094 is not covered by anything in this file — it keeps
+# serving plaintext HTTP, and the chart's probes use it that way. Serve the
+# management API over HTTPS by terminating TLS in front of the Service (the
+# chart's `ingress.tls` list, a reverse proxy, or a service mesh).
+#
+# TLS is compiled into every Streamline build, so it works with any image
+# edition — including a custom standard-edition build. No image capability is
+# required and the chart applies no edition gate here.
+# =============================================================================
+
 tls:
   enabled: true
-  certSecretName: streamline-tls
-  # Certificate paths inside the container
-  certFile: /etc/streamline/tls/tls.crt
-  keyFile: /etc/streamline/tls/tls.key
-  caFile: /etc/streamline/tls/ca.crt
-  # Enable mutual TLS (require client certificates)
-  mutualTls: false
+  # Reuse an operator-managed Secret (recommended). It must use the standard
+  # kubernetes.io/tls layout: tls.crt, tls.key and, for Kafka mTLS, ca.crt.
+  existingSecret: streamline-tls
+  # Where the material is mounted; the server is pointed at these paths through
+  # STREAMLINE_TLS_CERT / STREAMLINE_TLS_KEY / STREAMLINE_TLS_CA_CERT.
+  mountPath: /etc/streamline/tls
+  # Require client certificates from Kafka clients (mutual TLS on 9092,
+  # STREAMLINE_TLS_REQUIRE_CLIENT_CERT). Needs ca.crt in the Secret above.
+  # HTTP clients are never asked for a certificate.
+  clientAuth: false
+
+  # Alternative to existingSecret — inline, base64-encoded PEM material:
+  # certData: ""
+  # keyData: ""
+  # caData: ""

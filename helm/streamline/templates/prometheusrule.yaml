@@ -1,3 +1,10 @@
+{{/*
+⚠️  METRIC NAMES ARE UNVERIFIED. The streamline_* metrics referenced by these
+rules have not been confirmed against the metrics Streamline core emits (audit
+finding DEP-D-1); an alert on a metric that is never emitted can never fire.
+Every alert therefore carries a metric_status annotation. See
+monitoring/METRICS.md before depending on these rules.
+*/}}
 {{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled -}}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -19,6 +26,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "High produce latency (p99 > {{ .Values.metrics.prometheusRule.thresholds.produceLatencyWarning | default 0.1 }}s)"
             description: "Produce p99 latency is {{`{{ $value | humanizeDuration }}`}} on {{`{{ $labels.instance }}`}}."
 
@@ -28,6 +36,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "High fetch latency (p99 > {{ .Values.metrics.prometheusRule.thresholds.fetchLatencyWarning | default 0.2 }}s)"
             description: "Fetch p99 latency is {{`{{ $value | humanizeDuration }}`}} on {{`{{ $labels.instance }}`}}."
 
@@ -39,6 +48,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Consumer group lag exceeds {{ .Values.metrics.prometheusRule.thresholds.consumerLagWarning | default 10000 }} messages"
             description: "Group {{`{{ $labels.group }}`}} on topic {{`{{ $labels.topic }}`}} has lag of {{`{{ $value }}`}}."
 
@@ -48,6 +58,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Consumer group lag exceeds {{ .Values.metrics.prometheusRule.thresholds.consumerLagCritical | default 100000 }} messages"
             description: "Group {{`{{ $labels.group }}`}} on topic {{`{{ $labels.topic }}`}} has critical lag of {{`{{ $value }}`}}."
 
@@ -59,6 +70,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Disk usage above 80%"
             description: "Storage on {{`{{ $labels.instance }}`}} is {{`{{ $value | humanizePercentage }}`}} full."
 
@@ -68,6 +80,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Disk usage above 95%"
             description: "Storage on {{`{{ $labels.instance }}`}} is {{`{{ $value | humanizePercentage }}`}} full. Immediate action required."
 
@@ -79,6 +92,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Streamline server is down"
             description: "{{`{{ $labels.instance }}`}} has been unreachable for more than 1 minute."
 
@@ -88,6 +102,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Streamline using more than 4GB RSS memory"
             description: "{{`{{ $labels.instance }}`}} is using {{`{{ $value | humanize1024 }}`}}B of memory."
 
@@ -99,6 +114,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Active connections approaching limit (>8000)"
             description: "{{`{{ $value }}`}} active connections on {{`{{ $labels.instance }}`}}."
 
@@ -110,6 +126,7 @@ spec:
           labels:
             severity: warning
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Under-replicated partitions detected"
             description: "{{`{{ $value }}`}} partitions on {{`{{ $labels.instance }}`}} are under-replicated."
 
@@ -119,6 +136,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            metric_status: "unverified — the metric names in this expression have not been confirmed against Streamline core; see monitoring/METRICS.md"
             summary: "Replication lag exceeds 30 seconds"
             description: "Replica on {{`{{ $labels.instance }}`}} has {{`{{ $value }}`}}ms replication lag."
 
