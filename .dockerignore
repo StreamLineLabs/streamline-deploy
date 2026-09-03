@@ -1,3 +1,13 @@
+# NOTE: this file applies to builds whose context is this repository root.
+# No image is built that way any more:
+#   - Dockerfile, Dockerfile.edge and playground/Dockerfile build from the
+#     prepared core checkout (.build/core, see scripts/prepare-core-context.sh),
+#     which has its own — currently absent — .dockerignore.
+#   - docker/Dockerfile.seed builds with ./docker as its context.
+# It is kept only so an ad-hoc `docker build .` from the repository root stays
+# cheap. Do not copy these rules into the core context: they would exclude
+# core's own src/, tests/ and docs/ trees.
+
 .git
 .github
 .gitattributes

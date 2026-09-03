@@ -22,3 +22,11 @@ docker-compose.override.yml
 *.bak
 *.tmp
 .terraform/
+
+# Prepared image build context: scripts/prepare-core-context.sh checks the
+# whole Streamline core tree out here. It must never be committed back into
+# this repository, which deliberately ships no core sources.
+.build/
+
+# Packaged Helm chart output (`helm package --destination dist`)
+dist/

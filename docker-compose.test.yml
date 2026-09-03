@@ -1,12 +1,31 @@
 # Streamline Smoke Test
-# Starts Streamline, creates a topic, produces and consumes a message, then verifies.
-# Usage: docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from smoke-test
+#
+# Starts Streamline, creates a topic, produces and consumes a message, and
+# asserts every one of those steps. Nothing here is best-effort: a failing
+# `topics create`, a topic missing from `topics list`, a failed produce or a
+# message that does not come back all fail the stack, because this file is the
+# gate the publisher runs against a freshly built digest before any public tag
+# is written (.github/workflows/docker-publish.yml, stage 1).
+#
+# There is deliberately NO runnable default image. No Streamline image is
+# published yet, so a registry default here would send `up` at a tag nobody has
+# pushed while pretending a release exists. The placeholder below is local-only
+# and matches nothing in any registry: it keeps `docker compose config` valid
+# with no environment set (`make compose-config` parses this file without
+# pulling or running anything) and makes `up` stop with an explicit pull error
+# naming the variable to set.
+#
+# Usage — build the image from the pinned core commit first:
+#   scripts/prepare-core-context.sh
+#   make docker                     # -> streamline:dev
+#   STREAMLINE_IMAGE=streamline:dev docker compose -f docker-compose.test.yml \
+#     up --abort-on-container-exit --exit-code-from smoke-test
+#
+# or simply `make smoke-test`, which builds the image and runs this stack.
 
 services:
   streamline:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-test
     ports:
       - "19092:9092"
@@ -23,38 +42,51 @@ services:
       start_period: 3s
 
   smoke-test:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-smoke-test
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        set -e
+        set -eu
 
         echo "=== Streamline Smoke Test ==="
         echo ""
 
-        # 1. Wait for health endpoint
+        # 1. Wait for the health endpoint, but never wait forever: a server
+        #    that never becomes healthy must fail the run, not hang it.
         echo "[1/6] Waiting for Streamline to be healthy..."
-        until curl -sf http://streamline:9094/health > /dev/null 2>&1; do sleep 1; done
+        i=0
+        until curl -sf http://streamline:9094/health > /dev/null 2>&1; do
+          i=$$((i + 1))
+          if [ "$$i" -ge 60 ]; then
+            echo "  ✗ Streamline did not become healthy within 60s"
+            exit 1
+          fi
+          sleep 1
+        done
         echo "  ✓ Health endpoint responding"
 
         # 2. Verify health response
         echo "[2/6] Verifying health response..."
-        HEALTH=$(curl -sf http://streamline:9094/health)
+        HEALTH=$$(curl -sf http://streamline:9094/health)
         echo "  Health: $$HEALTH"
         echo "  ✓ Health check passed"
 
-        # 3. Create a test topic
+        # 3. Create a test topic. A failure here used to be swallowed with
+        #    `|| true`, which turned every later step into a test of nothing.
         echo "[3/6] Creating test topic 'smoke-test'..."
-        streamline-cli --broker streamline:9092 topics create smoke-test --partitions 2 2>/dev/null || true
+        streamline-cli --broker streamline:9092 topics create smoke-test --partitions 2
         echo "  ✓ Topic created"
 
-        # 4. List topics and verify
+        # 4. List topics and assert the new topic is really there
         echo "[4/6] Listing topics..."
-        streamline-cli --broker streamline:9092 topics list
-        echo "  ✓ Topic listing works"
+        TOPICS=$$(streamline-cli --broker streamline:9092 topics list)
+        echo "$$TOPICS"
+        if ! echo "$$TOPICS" | grep -q "smoke-test"; then
+          echo "  ✗ Created topic is missing from the topic listing"
+          exit 1
+        fi
+        echo "  ✓ Topic listing contains smoke-test"
 
         # 5. Produce a message
         echo "[5/6] Producing test message..."
