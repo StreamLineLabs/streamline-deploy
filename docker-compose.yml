@@ -2,6 +2,8 @@
 #
 # There is NO published Streamline image yet, so this file has no runnable
 # default: `docker-publish.yml` (the single publisher) has never pushed a tag
+# from an unpinned `core-source.env`, and a `ghcr.io/...:0.4.0` default here
+# only sent `up` at a manifest that does not exist while claiming a release.
 #
 # Build the image from the pinned core commit first:
 #

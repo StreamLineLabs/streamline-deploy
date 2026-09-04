@@ -41,6 +41,7 @@ bits rather than fresh builds.
 
 | Tag | Description |
 |-----|-------------|
+| `x.y.z` (e.g. `0.4.0`) | Specific release — **use this in deployments** |
 | `x.y` (e.g. `0.3`) | Latest patch for a minor version |
 | `core-<sha>` | The exact Streamline core commit the image was built from |
 | `latest` | Most recent non-prerelease release; mutable, unsuitable for pinning |

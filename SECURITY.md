@@ -4,8 +4,14 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| < 0.2   | :x:                |
+| 0.4.x   | :white_check_mark: |
+| < 0.4   | :x:                |
+
+These versions refer to the deployment artifacts in this repository (the Helm
+chart `version`/`appVersion`), currently 0.4.0. No container image or chart has
+been published yet: `core-source.env` pins no Streamline core commit, so the
+single publisher has pushed nothing, and every deployment default here requires
+an image you build and push yourself.
 
 ## Reporting a Vulnerability
 

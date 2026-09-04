@@ -137,6 +137,8 @@ FROM debian:bookworm-20250224-slim
 ARG STREAMLINE_EDITION=standard
 ARG STREAMLINE_FEATURES=""
 ARG STREAMLINE_CAPABILITIES=""
+# Version of the deployment artifacts / release this image belongs to.
+ARG STREAMLINE_VERSION=0.4.0
 # Full commit SHA of the core sources in the build context (see core-source.env).
 ARG STREAMLINE_CORE_REF=unknown
 

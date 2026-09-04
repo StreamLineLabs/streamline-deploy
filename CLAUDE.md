@@ -70,7 +70,7 @@ with an existing tag selected) is validation-only
 │   ├── prometheus.yml            # Prometheus scrape config
 │   └── docker-compose.benchmarks.yml
 ├── helm/streamline/
-│   ├── Chart.yaml                # v0.2.0
+│   ├── Chart.yaml                # v0.4.0
 │   ├── values.yaml               # Default values (security-hardened)
 │   ├── values.schema.json        # JSON Schema validation
 │   └── templates/
