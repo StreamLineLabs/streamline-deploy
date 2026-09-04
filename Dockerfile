@@ -46,6 +46,25 @@
 # labels so deployments can be checked against the capabilities they require.
 # =============================================================================
 
+# Fetch the exact jq binary used by the release smoke test in an isolated stage.
+# Checksum source:
+# https://github.com/jqlang/jq/releases/download/jq-1.7.1/sha256sum.txt
+FROM debian:bookworm-20250224-slim@sha256:12c396bd585df7ec21d5679bb6a83d4878bc4415ce926c9e5ea6426d23c60bdc AS jq-downloader
+
+ARG TARGETARCH
+RUN set -eux; \
+    test "$TARGETARCH" = "amd64"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl; \
+    curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+      --output /usr/local/bin/jq \
+      https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64; \
+    echo "5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5  /usr/local/bin/jq" \
+      | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/jq; \
+    /usr/local/bin/jq --version | grep -Fx 'jq-1.7.1'; \
+    rm -rf /var/lib/apt/lists/*
+
 # Build stage
 FROM rust:1.88-slim-bookworm AS builder
 
@@ -161,6 +180,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# The checksum-verified upstream binary is static, so no jq package or runtime
+# libraries are installed from Debian repositories.
+COPY --from=jq-downloader /usr/local/bin/jq /usr/local/bin/jq
 
 # Copy binaries from builder
 COPY --from=builder /app/target/release/streamline /usr/local/bin/

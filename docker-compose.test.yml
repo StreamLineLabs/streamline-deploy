@@ -1,11 +1,12 @@
 # Streamline Smoke Test
 #
-# Starts Streamline, creates a topic, produces and consumes a message, and
-# asserts every one of those steps. Nothing here is best-effort: a failing
-# `topics create`, a topic missing from `topics list`, a failed produce or a
-# message that does not come back all fail the stack, because this file is the
-# gate the publisher runs against a freshly built digest before any public tag
-# is written (.github/workflows/docker-publish.yml, stage 1).
+# Starts Streamline, creates a topic, produces and consumes a message through
+# the supported HTTP API, and asserts every one of those steps. Nothing here is
+# best-effort: an unexpected HTTP status, a topic missing from the list, a
+# failed produce, or a payload that does not come back all fail the stack,
+# because this file is the gate the publisher runs against a freshly built
+# digest before any public tag is written
+# (.github/workflows/docker-publish.yml, stage 1).
 #
 # There is deliberately NO runnable default image. No Streamline image is
 # published yet, so a registry default here would send `up` at a tag nobody has
@@ -44,68 +45,10 @@ services:
   smoke-test:
     image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-smoke-test
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -eu
-
-        echo "=== Streamline Smoke Test ==="
-        echo ""
-
-        # 1. Wait for the health endpoint, but never wait forever: a server
-        #    that never becomes healthy must fail the run, not hang it.
-        echo "[1/6] Waiting for Streamline to be healthy..."
-        i=0
-        until curl -sf http://streamline:9094/health > /dev/null 2>&1; do
-          i=$$((i + 1))
-          if [ "$$i" -ge 60 ]; then
-            echo "  ✗ Streamline did not become healthy within 60s"
-            exit 1
-          fi
-          sleep 1
-        done
-        echo "  ✓ Health endpoint responding"
-
-        # 2. Verify health response
-        echo "[2/6] Verifying health response..."
-        HEALTH=$$(curl -sf http://streamline:9094/health)
-        echo "  Health: $$HEALTH"
-        echo "  ✓ Health check passed"
-
-        # 3. Create a test topic. A failure here used to be swallowed with
-        #    `|| true`, which turned every later step into a test of nothing.
-        echo "[3/6] Creating test topic 'smoke-test'..."
-        streamline-cli --broker streamline:9092 topics create smoke-test --partitions 2
-        echo "  ✓ Topic created"
-
-        # 4. List topics and assert the new topic is really there
-        echo "[4/6] Listing topics..."
-        TOPICS=$$(streamline-cli --broker streamline:9092 topics list)
-        echo "$$TOPICS"
-        if ! echo "$$TOPICS" | grep -q "smoke-test"; then
-          echo "  ✗ Created topic is missing from the topic listing"
-          exit 1
-        fi
-        echo "  ✓ Topic listing contains smoke-test"
-
-        # 5. Produce a message
-        echo "[5/6] Producing test message..."
-        streamline-cli --broker streamline:9092 produce smoke-test -m '{"test":"smoke","ts":"'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
-        echo "  ✓ Message produced"
-
-        # 6. Consume and verify
-        echo "[6/6] Consuming messages..."
-        OUTPUT=$$(streamline-cli --broker streamline:9092 consume smoke-test --from-beginning -n 1 2>&1)
-        echo "  Consumed: $$OUTPUT"
-        if echo "$$OUTPUT" | grep -q "smoke"; then
-          echo "  ✓ Message consumed and verified"
-        else
-          echo "  ✗ Message verification failed"
-          exit 1
-        fi
-
-        echo ""
-        echo "=== All smoke tests passed! ==="
+    volumes:
+      - ./docker/smoke-test.sh:/usr/local/bin/streamline-smoke-test:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/streamline-smoke-test"]
+    command: []
     depends_on:
       streamline:
         condition: service_healthy

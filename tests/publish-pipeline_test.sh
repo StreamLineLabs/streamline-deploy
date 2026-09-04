@@ -8,7 +8,9 @@
 # already pull: a failing scan left a released tag in place, and the smoke test
 # it did run could not fail anything meaningful because the release had already
 # happened. The smoke test also swallowed its topic creation (`|| true`), so the
-# produce/consume assertions ran against a topic that may never have existed.
+# produce/consume assertions ran against a topic that may never have existed. A
+# later CLI redesign also made remote `--broker` calls invalid, so the release
+# gate now exercises the supported HTTP API and verifies statuses and payloads.
 #
 # The pipeline is now: push ONE staging reference → validate the resulting
 # DIGEST (smoke, scan, SBOM, signature, attestations) → promote that exact
@@ -23,6 +25,7 @@ cd "$REPO_ROOT"
 
 PUBLISHER=".github/workflows/docker-publish.yml"
 SMOKE="docker-compose.test.yml"
+SMOKE_SCRIPT="docker/smoke-test.sh"
 BUILD_JOB="build-and-verify"
 CONTRACT_JOB="release-contract"
 PROMOTE_JOB="promote"
@@ -35,7 +38,7 @@ fail() {
   status=1
 }
 
-for f in "$PUBLISHER" "$SMOKE"; do
+for f in "$PUBLISHER" "$SMOKE" "$SMOKE_SCRIPT"; do
   [ -f "$f" ] || { echo "FAIL: $f is missing" >&2; exit 1; }
 done
 
@@ -295,21 +298,49 @@ done < <(config_lines "$PUBLISHER" | grep -E '^[[:space:]]+if:' || true)
 # ---------------------------------------------------------------------------
 # 5. The smoke test the publisher runs actually asserts something
 # ---------------------------------------------------------------------------
-if config_lines "$SMOKE" | grep -Fq '|| true'; then
-  fail "$SMOKE must not swallow failures with '|| true': the create/produce/consume assertions have to execute"
+if config_lines "$SMOKE_SCRIPT" | grep -Fq '|| true'; then
+  fail "$SMOKE_SCRIPT must not swallow failures with '|| true': the create/produce/consume assertions have to execute"
 fi
-for assertion in 'topics create' 'topics list' 'produce' 'consume'; do
-  grep -Fq "$assertion" "$SMOKE" \
-    || fail "$SMOKE must exercise '$assertion'"
+if config_lines "$SMOKE" | grep -Fq -- '--broker' \
+    || config_lines "$SMOKE_SCRIPT" | grep -Fq -- '--broker'; then
+  fail "the smoke stack must not call the local-data-dir CLI with the removed --broker option"
+fi
+if config_lines "$SMOKE" | grep -Fq 'streamline-cli' \
+    || config_lines "$SMOKE_SCRIPT" | grep -Fq 'streamline-cli'; then
+  fail "the smoke stack must use the supported HTTP API instead of a CLI that cannot target the server"
+fi
+grep -Fq './docker/smoke-test.sh:/usr/local/bin/streamline-smoke-test:ro' "$SMOKE" \
+  || fail "$SMOKE must mount the checked-in smoke script read-only"
+grep -Fq 'entrypoint: ["/bin/sh", "/usr/local/bin/streamline-smoke-test"]' "$SMOKE" \
+  || fail "$SMOKE must execute the checked-in smoke script"
+# shellcheck disable=SC2016  # match literal variables used by the smoke script
+for endpoint in \
+  '/api/v1/topics' \
+  '/api/v1/topics/$SMOKE_TOPIC/messages' \
+  '/api/v1/topics/$SMOKE_TOPIC/partitions/0/messages?offset=$PRODUCED_OFFSET&limit=1'; do
+  grep -Fq "$endpoint" "$SMOKE_SCRIPT" \
+    || fail "$SMOKE_SCRIPT must exercise '$endpoint'"
 done
-grep -Fq 'Created topic is missing from the topic listing' "$SMOKE" \
-  || fail "$SMOKE must assert the created topic appears in the listing, not just that the command ran"
-grep -Fq 'Message verification failed' "$SMOKE" \
-  || fail "$SMOKE must assert the consumed message matches what was produced"
-grep -Eq 'set -eu' "$SMOKE" \
-  || fail "$SMOKE must run under 'set -eu' so an unchecked command cannot pass silently"
-grep -Fq 'did not become healthy' "$SMOKE" \
-  || fail "$SMOKE must bound its health wait and fail, rather than hang, when the server never starts"
+grep -Fq -- '--fail-with-body' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must make curl fail on HTTP error responses"
+grep -Fq -- "--write-out '%{http_code}'" "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must capture and assert each HTTP response status"
+# shellcheck disable=SC2016  # match the literal JSON template in the smoke script
+grep -Fq '\"records\":[{\"key\":\"$SMOKE_KEY\"' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must produce with the real records request schema"
+grep -Fq 'extract_produced_offset' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must capture the offset returned by the produce API"
+grep -Fq 'assert_topic_list_response' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must structurally validate the topic listing"
+# shellcheck disable=SC2016  # match the literal produced-offset assertion
+grep -Fq 'assert_consume_response "$PRODUCED_OFFSET"' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must structurally validate the consumed record at the produced offset"
+[ "$(grep -c 'jq --slurp' "$SMOKE_SCRIPT")" -ge 5 ] \
+  || fail "$SMOKE_SCRIPT must parse every JSON response with jq --slurp"
+grep -Eq '^set -eu' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must run under 'set -eu' so an unchecked command cannot pass silently"
+grep -Fq 'did not become healthy' "$SMOKE_SCRIPT" \
+  || fail "$SMOKE_SCRIPT must bound its health wait and fail, rather than hang, when the server never starts"
 
 if [ "$status" -eq 0 ]; then
   echo "publish-pipeline gate passed: staged digest validated before any public tag, promoted by digest identity"

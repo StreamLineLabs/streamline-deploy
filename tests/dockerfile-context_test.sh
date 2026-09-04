@@ -62,8 +62,9 @@ for df in "${CORE_DOCKERFILES[@]}"; do
     in_builder { print }
   ' "$df")"
   runtime_stage="$(awk '
-    /^FROM / { stages += 1 }
-    stages >= 2 { print }
+    /^FROM / { stage = $0 ORS; next }
+    { stage = stage $0 ORS }
+    END { printf "%s", stage }
   ' "$df")"
   builder_code="$(printf '%s\n' "$builder_stage" | sed '/^[[:space:]]*#/d')"
 
@@ -83,6 +84,31 @@ for df in "${CORE_DOCKERFILES[@]}"; do
     fail "$df must keep C++ build tooling out of the runtime image"
   fi
 done
+
+# The release smoke service reuses the official runtime image and validates
+# response bodies structurally. Keep jq in that runtime alongside curl.
+official_runtime_stage="$(awk '
+  /^FROM / { stage = $0 ORS; next }
+  { stage = stage $0 ORS }
+  END { printf "%s", stage }
+' Dockerfile)"
+official_runtime_code="$(printf '%s\n' "$official_runtime_stage" | sed '/^[[:space:]]*#/d')"
+grep -Fq 'FROM debian:bookworm-20250224-slim@sha256:12c396bd585df7ec21d5679bb6a83d4878bc4415ce926c9e5ea6426d23c60bdc AS jq-downloader' Dockerfile \
+  || fail "Dockerfile must download jq in the immutable pinned downloader stage"
+grep -Fq 'https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64' Dockerfile \
+  || fail "Dockerfile must fetch the official jq 1.7.1 amd64 release asset"
+grep -Fq '5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5  /usr/local/bin/jq' Dockerfile \
+  || fail "Dockerfile must verify the official jq-linux-amd64 1.7.1 SHA-256"
+grep -Fq 'sha256sum -c -' Dockerfile \
+  || fail "Dockerfile must fail when the pinned jq checksum does not match"
+grep -Fq "grep -Fx 'jq-1.7.1'" Dockerfile \
+  || fail "Dockerfile must verify the downloaded jq version"
+grep -Fq 'COPY --from=jq-downloader /usr/local/bin/jq /usr/local/bin/jq' Dockerfile \
+  || fail "Dockerfile runtime must copy only the checksum-verified jq binary"
+if printf '%s\n' "$official_runtime_code" \
+    | grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$'; then
+  fail "Dockerfile must not install jq from a live Debian repository"
+fi
 
 # --- No Compose file may build a core-compiling Dockerfile from this repo ----
 for compose in docker-compose*.yml */docker-compose*.yml; do
