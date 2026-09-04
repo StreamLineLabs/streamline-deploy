@@ -36,11 +36,11 @@ fi
 # Dockerfile that runs cargo, not just the official one.
 CORE_DOCKERFILES=()
 while IFS= read -r df; do
-  grep -Eq '^RUN[[:space:]].*cargo build' "$df" && CORE_DOCKERFILES+=("$df")
+  grep -Fq 'cargo build' "$df" && CORE_DOCKERFILES+=("$df")
 done < <(find . -maxdepth 2 -name 'Dockerfile*' -not -path './.build/*' | sort)
 
-[ "${#CORE_DOCKERFILES[@]}" -ge 2 ] \
-  || fail "expected at least Dockerfile and Dockerfile.edge to compile core, found: ${CORE_DOCKERFILES[*]:-none}"
+[ "${#CORE_DOCKERFILES[@]}" -ge 3 ] \
+  || fail "expected Dockerfile, Dockerfile.edge and playground/Dockerfile to compile core, found: ${CORE_DOCKERFILES[*]:-none}"
 
 for df in "${CORE_DOCKERFILES[@]}"; do
   grep -Fq 'prepare-core-context.sh' "$df" \
@@ -54,6 +54,33 @@ for df in "${CORE_DOCKERFILES[@]}"; do
   # The per-crate COPY lists silently broke whenever core changed layout.
   if grep -Eq '^COPY (crates/|src/|Cargo\.toml)' "$df"; then
     fail "$df must not hard-code core source paths"
+  fi
+
+  builder_stage="$(awk '
+    /^FROM .* AS builder/ { in_builder = 1 }
+    in_builder && /^FROM / && $0 !~ / AS builder/ { exit }
+    in_builder { print }
+  ' "$df")"
+  runtime_stage="$(awk '
+    /^FROM / { stages += 1 }
+    stages >= 2 { print }
+  ' "$df")"
+  builder_code="$(printf '%s\n' "$builder_stage" | sed '/^[[:space:]]*#/d')"
+
+  # Bundled DuckDB/libduckdb-sys is C++. Any image that builds `full`, explicit
+  # `analytics`, or an arbitrary STREAMLINE_FEATURES list must provide a C++
+  # compiler in the builder only.
+  if printf '%s\n' "$builder_code" \
+      | grep -Eq 'STREAMLINE_FEATURES|--features[^[:cntrl:]]*(full|analytics)'; then
+    printf '%s\n' "$builder_stage" | grep -Eq '^[[:space:]]+g\+\+[[:space:]]*\\?$' \
+      || fail "$df builder must install g++ for full/analytics DuckDB builds"
+    printf '%s\n' "$builder_stage" | grep -Fq -- '--no-install-recommends' \
+      || fail "$df builder dependencies must stay non-recommended"
+  fi
+
+  if printf '%s\n' "$runtime_stage" \
+      | grep -Eq '^[[:space:]]+(g\+\+|build-essential)[[:space:]]*\\?$'; then
+    fail "$df must keep C++ build tooling out of the runtime image"
   fi
 done
 

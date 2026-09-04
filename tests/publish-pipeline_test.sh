@@ -116,26 +116,34 @@ done
 # 0. A release tag is bound to the pinned core package version before build
 # ---------------------------------------------------------------------------
 if [ -n "$contract_job" ]; then
+  # shellcheck disable=SC2016  # match the literal workflow expression
   printf '%s\n' "$contract_job" | grep -Fq 'RELEASE_TAG: ${{ github.ref_name }}' \
     || fail "$CONTRACT_JOB must pass the push tag through the environment"
+  # shellcheck disable=SC2016  # match the literal shell expression
   printf '%s\n' "$contract_job" | grep -Fq '"${CORE_CONTEXT}/Cargo.toml"' \
     || fail "$CONTRACT_JOB must read the pinned core Cargo.toml"
+  # shellcheck disable=SC2016  # match the literal shell expression
   printf '%s\n' "$contract_job" | grep -Fq 'tag_version="${RELEASE_TAG#v}"' \
     || fail "$CONTRACT_JOB must derive the image version from the v-prefixed push tag"
+  # shellcheck disable=SC2016  # match the literal shell expression
   printf '%s\n' "$contract_job" | grep -Fq 'tag_version}" != "${core_version}' \
     || fail "$CONTRACT_JOB must require the push tag and pinned core Cargo version to match exactly"
+  # shellcheck disable=SC2016  # match the literal shell expression
   printf '%s\n' "$contract_job" | grep -Fq 'version=${version}' \
     || fail "$CONTRACT_JOB must expose the verified exact release version"
 fi
 
 printf '%s\n' "$build_job" | grep -Eq "needs:.*$CONTRACT_JOB" \
   || fail "$BUILD_JOB must depend on $CONTRACT_JOB before building"
+# shellcheck disable=SC2016  # match the literal workflow expression
 printf '%s\n' "$build_job" | grep -Fq 'STREAMLINE_VERSION=${{ needs.release-contract.outputs.version }}' \
   || fail "$BUILD_JOB must pass the exact verified STREAMLINE_VERSION build argument"
+# shellcheck disable=SC2016  # match the literal workflow expression
 printf '%s\n' "$build_job" | grep -Fq 'org.opencontainers.image.version=${{ needs.release-contract.outputs.version }}' \
   || fail "$BUILD_JOB must label the image with the exact verified release version"
 printf '%s\n' "$build_job" | grep -Fq 'org.opencontainers.image.version' \
   || fail "$BUILD_JOB must inspect the staged image's OCI version label"
+# shellcheck disable=SC2016  # match the literal shell expression
 printf '%s\n' "$build_job" | grep -Fq 'actual_version}" != "${EXPECTED_VERSION}' \
   || fail "$BUILD_JOB must reject a staged image whose OCI version label differs from the verified release version"
 
