@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-COPY seed-data.sh /seed-data.sh
+COPY seed-data.sh seed-runtime.sh seed-fixtures.sh /
 RUN chmod +x /seed-data.sh
 
 ENTRYPOINT ["/seed-data.sh"]

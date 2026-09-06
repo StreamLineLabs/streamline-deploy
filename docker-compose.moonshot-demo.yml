@@ -1,14 +1,50 @@
 # Moonshot feature demo with seeded data
-# Run: docker compose -f docker-compose.moonshot-demo.yml up
-version: "3.8"
+#
+# The moonshot features (semantic topics, agent memory, attestation, branches)
+# are compile-time cargo features of Streamline core. Nothing turns them on at
+# run time: the server reads no STREAMLINE_FEATURES variable, so setting one
+# would only make this stack *look* like it enabled something.
+#
+# There is deliberately no usable default image. No published tag is built with
+# these features — the single publisher (.github/workflows/docker-publish.yml)
+# builds STREAMLINE_FEATURES=full, which covers SASL auth and clustering, not
+# moonshot — and this repository ships no core sources, so there is no `build:`
+# stanza that could work here either. Supply an image you built yourself from
+# the pinned core commit:
+#
+#   scripts/prepare-core-context.sh
+#   docker build -f Dockerfile .build/core \
+#     --build-arg STREAMLINE_EDITION=custom \
+#     --build-arg STREAMLINE_FEATURES=moonshot \
+#     --build-arg STREAMLINE_CAPABILITIES=moonshot \
+#     --build-arg STREAMLINE_CORE_REF="$(scripts/prepare-core-context.sh --print-ref)" \
+#     -t streamline-moonshot:dev
+#
+#   # equivalently:
+#   make docker STREAMLINE_EDITION=custom STREAMLINE_FEATURES=moonshot \
+#     STREAMLINE_CAPABILITIES=moonshot \
+#     STREAMLINE_IMAGE=streamline-moonshot:dev
+#
+# Then run the demo against that image:
+#
+#   STREAMLINE_MOONSHOT_IMAGE=streamline-moonshot:dev \
+#     docker compose -f docker-compose.moonshot-demo.yml up
+#
+# Pass whichever feature name(s) your core checkout actually defines: cargo
+# fails the build on an unknown feature, which is the point — the image either
+# contains the features or it never gets built.
+#
+# The placeholder tag below is local-only and matches nothing in any registry.
+# It keeps `docker compose config` valid and honest with no environment set
+# (`make compose-config` validates this stack without pulling or running
+# anything), while `up` stops with a pull error instead of starting a stock
+# server that silently lacks every feature this demo is supposed to show.
 services:
   streamline:
-    image: streamlinelabs/streamline:latest
+    image: ${STREAMLINE_MOONSHOT_IMAGE:-streamline-moonshot:set-STREAMLINE_MOONSHOT_IMAGE}
     ports:
       - "9092:9092"
       - "9094:9094"
-    environment:
-      STREAMLINE_FEATURES: "semantic-topics,agent-memory,attestation,branches"
     volumes:
       - ./demo-data:/demo-data
     healthcheck:
@@ -18,7 +54,7 @@ services:
 
   # Seed demo data after Streamline is healthy
   demo-seeder:
-    image: streamlinelabs/streamline:latest
+    image: ${STREAMLINE_MOONSHOT_IMAGE:-streamline-moonshot:set-STREAMLINE_MOONSHOT_IMAGE}
     depends_on:
       streamline:
         condition: service_healthy
@@ -26,11 +62,11 @@ services:
     command:
       - |
         # Create semantic topic
-        streamline-cli --broker localhost:9092 topics create logs.app --partitions 3
-        # Create contract topic  
-        streamline-cli --broker localhost:9092 topics create orders --partitions 2
+        streamline-cli --broker streamline:9092 topics create logs.app --partitions 3
+        # Create contract topic
+        streamline-cli --broker streamline:9092 topics create orders --partitions 2
         # Seed some data
-        for i in $(seq 1 50); do
-          streamline-cli --broker localhost:9092 produce logs.app -m "Log entry $i: application started processing request"
+        for i in $$(seq 1 50); do
+          streamline-cli --broker streamline:9092 produce logs.app -m "Log entry $$i: application started processing request"
         done
         echo "Demo data seeded successfully!"

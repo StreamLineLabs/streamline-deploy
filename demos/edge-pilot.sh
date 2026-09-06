@@ -1,60 +1,41 @@
 #!/usr/bin/env bash
-# Edge Fleet Pilot Demo
+# Edge Fleet Pilot Demo — DISABLED (unsupported).
 #
-# Demonstrates edge-to-cloud pipeline using Docker:
-#   1. Start cloud Streamline server
-#   2. Start 3 edge instances with MQTT bridge
-#   3. Publish MQTT sensor data to edges
-#   4. Verify data flows to cloud
+# This script used to start an "edge appliance", publish MQTT sensor data to
+# :1883 and claim the readings reached a cloud broker. None of that is
+# demonstrable from this repository:
 #
-# Usage:
-#   ./demos/edge-pilot.sh           # Run demo
-#   ./demos/edge-pilot.sh --cleanup # Tear down
-
+#   * No verified Streamline build opens an MQTT listener. The bridge, the
+#     store-and-forward buffer and the cloud-sync loop are unverified claims
+#     about core; no smoke test, conformance run or published image exercises
+#     them.
+#   * No edge image exists anywhere. The single publisher
+#     (.github/workflows/docker-publish.yml) builds `Dockerfile` and pushes
+#     ghcr.io/streamlinelabs/streamline only, so `streamline-edge` has never
+#     been built or pushed by anything here.
+#   * The compose stack this script drove (docker-compose.edge.yml) has been
+#     removed rather than left as a runnable surface for behaviour nobody can
+#     confirm.
+#
+# It therefore fails closed: it starts nothing, pulls nothing and touches no
+# Docker resources. Dockerfile.edge is kept as an unsupported *source
+# reference* only. tests/edge-unsupported_test.sh keeps it that way.
 set -euo pipefail
-DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE="$DEPLOY_DIR/docker-compose.edge.yml"
 
-if [ "${1:-}" = "--cleanup" ]; then
-    docker compose -f "$COMPOSE" --profile test down -v 2>/dev/null || true
-    echo "Cleaned up."
-    exit 0
-fi
+cat >&2 <<'MSG'
+error: the edge pilot demo is disabled.
 
-echo ""
-echo "  ⚡ Streamline Edge Fleet Pilot"
-echo "  ──────────────────────────────"
-echo ""
+Streamline's edge runtime (MQTT bridge on 1883, store-and-forward, cloud sync)
+is not verified against core, and no edge image is built or published by this
+repository. There is nothing to run, so this demo refuses to start containers
+instead of pretending a pipeline works.
 
-echo "Step 1: Starting edge server + MQTT bridge..."
-docker compose -f "$COMPOSE" up -d streamline-edge
-echo "  Waiting for health..."
-for i in $(seq 1 30); do
-    curl -sf http://localhost:9094/health >/dev/null 2>&1 && break || sleep 1
-done
-echo "  ✅ Edge server ready (Kafka:9092, HTTP:9094, MQTT:1883)"
+What exists today:
+  * Dockerfile.edge                    unsupported source reference, unbuilt
+  * docker/edge/streamline-edge.toml   reference config, edge/MQTT disabled
 
-echo ""
-echo "Step 2: Publishing MQTT sensor data..."
-docker compose -f "$COMPOSE" --profile test up mqtt-test 2>/dev/null || {
-    echo "  Fallback: using curl to produce via HTTP API..."
-    for i in $(seq 1 5); do
-        curl -sf -X POST http://localhost:9094/api/v1/playground/sessions/default/produce \
-            -H 'Content-Type: application/json' \
-            -d "{\"topic\":\"sensors-temperature\",\"value\":\"{\\\"device\\\":\\\"sensor-$i\\\",\\\"temp\\\":$((20+i)),\\\"ts\\\":\\\"$(date -Iseconds)\\\"}\"}" 2>/dev/null || true
-    done
-    echo "  ✅ Produced 5 sensor readings"
-}
-
-echo ""
-echo "Step 3: Verifying data..."
-echo "  Health: $(curl -sf http://localhost:9094/health 2>/dev/null || echo 'N/A')"
-echo "  Info:   $(curl -sf http://localhost:9094/info 2>/dev/null | head -c 200 || echo 'N/A')"
-
-echo ""
-echo "  ═══════════════════════════════════════"
-echo "  Edge Pilot Complete!"
-echo "  Server:  http://localhost:9094"
-echo "  MQTT:    mqtt://localhost:1883"
-echo "  Cleanup: $0 --cleanup"
-echo "  ═══════════════════════════════════════"
+Restoring this demo means, in order: verifying the listeners against a real
+core build, re-enabling the configuration, adding a smoke test that asserts
+data actually flows, and only then bringing back a runnable compose stack.
+MSG
+exit 1

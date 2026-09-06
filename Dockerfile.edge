@@ -1,42 +1,74 @@
-# Streamline Edge Appliance Image
-# Optimized for ARM64/x86 IoT gateways and edge deployments.
+# =============================================================================
+# Streamline Edge Appliance Image — UNSUPPORTED REFERENCE. NOT BUILT. NOT RUN.
+# =============================================================================
+# This file is kept as a *source reference* for what an edge build would look
+# like. Nothing in this repository builds, publishes, runs or tests it, and no
+# deployment artifact references an edge image:
 #
-# Features:
-# - Minimal footprint (<30MB image)
-# - MQTT bridge for IoT device ingestion
-# - Store-and-forward for intermittent connectivity
-# - Auto-sync to cloud Streamline cluster
+#   * The edge runtime surface is unverified. The MQTT bridge on :1883, the
+#     store-and-forward buffer and the cloud-sync loop are claims about
+#     Streamline core that this repository cannot demonstrate: no published
+#     image, smoke test or conformance run exercises any of them. The compose
+#     stack that used to "run the appliance" (docker-compose.edge.yml) and the
+#     pilot demo that drove it have been removed rather than left pointing at
+#     an endpoint nothing serves — see tests/edge-unsupported_test.sh, which
+#     fails the build if either comes back as a runnable surface.
+#   * The single publisher (.github/workflows/docker-publish.yml) builds
+#     `Dockerfile` only and pushes ghcr.io/streamlinelabs/streamline; there has
+#     never been a `streamline-edge` tag anywhere.
+#   * The image therefore exposes the Kafka and HTTP ports only. It does not
+#     EXPOSE 1883, because that would advertise a listener no verified build
+#     opens, and the bundled configuration ships the edge and MQTT sections
+#     disabled (docker/edge/streamline-edge.toml).
 #
-# Build:
-#   docker build -f Dockerfile.edge -t streamline-edge:latest .
+# If edge support lands in core, the work is: verify the listeners, re-enable
+# the configuration, add a real smoke test, and only then restore a runnable
+# stack. Until then, treat everything below as documentation.
 #
-# Build for ARM64:
-#   docker buildx build --platform linux/arm64 -f Dockerfile.edge -t streamline-edge:arm64 .
+# CONTEXT: like the official `Dockerfile`, the build context here is the
+# prepared *Streamline core* checkout, not this repository. streamline-deploy
+# contains no Rust sources, so building with `context: .` cannot work — it only
+# ever produced a "Cargo.toml not found" failure. The context is produced by
+# scripts/prepare-core-context.sh, which checks out the commit pinned in
+# core-source.env and overlays this repository's image assets (including
+# docker/edge/streamline-edge.toml) under .deploy/.
 #
-# Run:
-#   docker run -d --name streamline-edge \
-#     -p 9092:9092 -p 9094:9094 -p 1883:1883 \
-#     -e STREAMLINE_EDGE_ID=edge-gateway-01 \
-#     -e STREAMLINE_CLOUD_ENDPOINT=wss://cloud.example.com:9092 \
-#     -v edge-data:/data \
-#     streamline-edge:latest
+# Reference build (unsupported; the resulting image is not tested by anything):
+#   scripts/prepare-core-context.sh                  # -> .build/core
+#   docker build -f Dockerfile.edge .build/core \
+#     --build-arg STREAMLINE_CORE_REF="$(scripts/prepare-core-context.sh --print-ref)" \
+#     -t streamline-edge:unsupported-reference
+# =============================================================================
 
 # --- Build stage ---
-FROM rust:1.80-slim-bookworm AS builder
+FROM rust:1.88-slim-bookworm AS builder
 
 ARG TARGETARCH
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY Cargo.toml Cargo.lock* ./
-COPY crates/ ./crates/
-COPY src/ ./src/
+# Copy the whole prepared context. Per-crate COPY lists silently break whenever
+# core adds or renames a crate, which is how this file came to reference paths
+# that do not exist in any context it was ever built with.
+COPY . .
 
-# Build edge-optimized binary (lite features + edge)
-RUN cargo build --release --features "compression,edge" \
+# A Cargo.lock is required so the image is reproducible from the pinned commit,
+# and its absence is the clearest signal that the context is not a core checkout.
+RUN test -f Cargo.lock || { \
+      echo "Cargo.lock missing from the build context; is it a Streamline core checkout?" >&2; \
+      echo "Run scripts/prepare-core-context.sh and build against .build/core." >&2; \
+      exit 1; \
+    }
+
+# Build the edge binary. The feature list is fixed here (no STREAMLINE_FEATURES
+# build arg): the image either compiles these cargo features or cargo fails and
+# it is never produced. Whether core's `edge` feature actually opens an MQTT
+# listener is exactly the claim this repository cannot verify.
+RUN cargo build --release --locked --features "compression,edge" \
     && strip target/release/streamline \
     && strip target/release/streamline-cli
 
@@ -58,8 +90,12 @@ COPY --from=builder /app/target/release/streamline-cli /usr/local/bin/
 RUN groupadd -r streamline && useradd -r -g streamline -u 1000 streamline \
     && mkdir -p /data /config && chown -R streamline:streamline /data /config
 
-# Copy default edge config
-COPY docker/edge/streamline-edge.toml /config/streamline.toml
+# Copy default edge config. It ships in streamline-deploy, not in core, so it
+# reaches the build context through the .deploy/ overlay that
+# scripts/prepare-core-context.sh writes. It ships with the edge and MQTT
+# sections DISABLED: an unsupported reference image must not try to open a
+# listener nobody has verified.
+COPY .deploy/docker/edge/streamline-edge.toml /config/streamline.toml
 
 # Environment
 ENV STREAMLINE_DATA_DIR=/data \
@@ -67,11 +103,11 @@ ENV STREAMLINE_DATA_DIR=/data \
     STREAMLINE_LISTEN_ADDR=0.0.0.0:9092 \
     STREAMLINE_HTTP_ADDR=0.0.0.0:9094 \
     STREAMLINE_LOG_LEVEL=info \
-    STREAMLINE_EDGE_MODE=true \
     RUST_LOG=info
 
-# Ports: Kafka(9092) + HTTP(9094) + MQTT(1883)
-EXPOSE 9092 9094 1883
+# Ports: Kafka(9092) + HTTP(9094) only. 1883 is deliberately not exposed: an
+# MQTT listener is an unverified claim about core, and EXPOSE is a claim.
+EXPOSE 9092 9094
 
 VOLUME ["/data"]
 
@@ -83,7 +119,16 @@ USER 1000:1000
 ENTRYPOINT ["streamline"]
 CMD ["--config", "/config/streamline.toml"]
 
-LABEL org.opencontainers.image.title="Streamline Edge" \
-      org.opencontainers.image.description="Edge-optimized streaming platform with MQTT bridge" \
+# Full commit SHA of the core sources in the build context (see core-source.env).
+ARG STREAMLINE_CORE_REF=unknown
+
+LABEL org.opencontainers.image.title="Streamline Edge (unsupported reference)" \
+      org.opencontainers.image.description="Unsupported reference build of Streamline with the compression and edge cargo features. Not published, not tested, and no edge runtime behaviour is verified." \
       org.opencontainers.image.vendor="StreamlineLabs" \
-      org.opencontainers.image.source="https://github.com/streamlinelabs/streamline-deploy"
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/streamlinelabs/streamline-deploy" \
+      org.opencontainers.image.revision="${STREAMLINE_CORE_REF}" \
+      dev.streamline.edition="edge" \
+      dev.streamline.features="compression,edge" \
+      dev.streamline.capabilities="none" \
+      dev.streamline.support="unsupported-reference"

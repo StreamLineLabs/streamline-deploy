@@ -1,3 +1,4 @@
+{{- include "streamline.validateConfiguration" . -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -32,12 +33,18 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: streamline
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "streamline.imageRef" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.extraArgs }}
+          # Mirrors the image CMD so that appending config.extraArgs never
+          # drops the default listen address or data directory.
           args:
+            - --listen-addr
+            - {{ .Values.config.kafkaAddr | quote }}
+            - --data-dir
+            - {{ .Values.config.dataDir | quote }}
+            {{- with .Values.config.extraArgs }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
           ports:
             - name: kafka
               containerPort: 9092
@@ -62,17 +69,23 @@ spec:
                   fieldPath: status.podIP
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.persistence.enabled }}
           volumeMounts:
+            {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.config.dataDir }}
+            {{- end }}
             - name: tmp
               mountPath: /tmp
-          {{- else }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-          {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: {{ .Values.tls.mountPath | default "/etc/streamline/tls" }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: auth
+              mountPath: {{ .Values.auth.mountPath | default "/etc/streamline/auth" }}
+              readOnly: true
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
@@ -104,6 +117,21 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ include "streamline.tlsSecretName" . }}
+            defaultMode: 288  # 0440 — readable by the streamline user and group only
+        {{- end }}
+        {{- if .Values.auth.enabled }}
+        - name: auth
+          secret:
+            secretName: {{ include "streamline.authSecretName" . }}
+            defaultMode: 288  # 0440 — readable by the streamline user and group only
+            items:
+              - key: {{ include "streamline.authUsersFileKey" . }}
+                path: {{ include "streamline.authUsersFileKey" . }}
+        {{- end }}
   {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

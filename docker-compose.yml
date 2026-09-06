@@ -1,11 +1,30 @@
-# Available from both registries:
-# - ghcr.io/streamlinelabs/streamline:latest
-# - streamlinelabs/streamline:latest (Docker Hub)
+# Streamline single-node deployment.
+#
+# There is NO published Streamline image yet, so this file has no runnable
+# default: `docker-publish.yml` (the single publisher) has never pushed a tag
+# from an unpinned `core-source.env`, and a `ghcr.io/...:0.4.0` default here
+# only sent `up` at a manifest that does not exist while claiming a release.
+#
+# Build the image from the pinned core commit first:
+#
+#   scripts/prepare-core-context.sh        # materialises .build/core
+#   make docker                            # -> streamline:dev
+#   STREAMLINE_IMAGE=streamline:dev docker compose up -d
+#
+# The placeholder default below is local-only and matches nothing in any
+# registry: `docker compose config` (and `make compose-config`) stays valid with
+# no environment set, while `up` stops with a pull error naming the variable to
+# set instead of pretending a registry tag exists.
+#
+# When images are published, GHCR is the only registry they will appear in:
+# .github/workflows/docker-publish.yml pushes ghcr.io tags only, and only after
+# a staged digest passes smoke, scan, signing and attestation.
+#
+# This repository contains no Streamline core sources, so there is deliberately
+# no `build:` stanza here; see Dockerfile and scripts/prepare-core-context.sh.
 services:
   streamline:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline
     ports:
       - "9092:9092"   # Kafka protocol
@@ -31,4 +50,3 @@ services:
 volumes:
   streamline_data:
     driver: local
-

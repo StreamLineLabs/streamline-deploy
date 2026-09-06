@@ -1,4 +1,9 @@
-# Edge Build Profile for Streamline
+# Edge Build Profile for Streamline — UNSUPPORTED REFERENCE
+#
+# Documentation only. Nothing in this repository consumes this file, and the
+# edge runtime behaviour it optimises for (MQTT bridge, store-and-forward,
+# cloud sync) is not verified against Streamline core — see Dockerfile.edge,
+# which is kept as an unsupported reference for the same reason.
 #
 # Defines the minimal feature set and compiler optimizations for edge
 # deployments. The edge binary targets IoT gateways, ARM64 devices, and

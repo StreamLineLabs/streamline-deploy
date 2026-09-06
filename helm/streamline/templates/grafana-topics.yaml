@@ -1,0 +1,44 @@
+{{- if and .Values.metrics.enabled .Values.metrics.grafanaDashboards.enabled -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "streamline.grafanaDashboardMetadata" (dict "root" . "name" "topics") | nindent 2 }}
+data:
+  streamline-topics.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "panels": [
+        {
+          "title": "Messages In by Topic",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{ "expr": "rate(streamline_topic_messages_in_total[5m])", "legendFormat": "{{`{{topic}}`}}" }]
+        },
+        {
+          "title": "Messages Out by Topic",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{ "expr": "rate(streamline_topic_messages_out_total[5m])", "legendFormat": "{{`{{topic}}`}}" }]
+        },
+        {
+          "title": "Topic Storage Size",
+          "type": "bargauge",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [{ "expr": "streamline_topic_log_size_bytes", "legendFormat": "{{`{{topic}}`}}" }]
+        },
+        {
+          "title": "Partition Count by Topic",
+          "type": "table",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [{ "expr": "streamline_topic_partitions", "legendFormat": "{{`{{topic}}`}}", "format": "table", "instant": true }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["streamline", "topics"],
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Streamline Topics",
+      "uid": "streamline-topics"
+    }
+{{- end }}

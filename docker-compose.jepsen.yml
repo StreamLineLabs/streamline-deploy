@@ -1,11 +1,22 @@
 # Jepsen-style Correctness Testing for Streamline
 #
-# This docker-compose file sets up a 3-node Streamline cluster with a
+# This docker-compose file sets up a 3-node Streamline harness with a
 # Jepsen control node for running correctness tests under adversarial
 # conditions (network partitions, process crashes, clock skew).
 #
+# UNSUPPORTED HARNESS. Multi-node operation is not supported by the deployment
+# artifacts in this repository: the Helm chart and the raw manifests reject
+# clustering and more than one broker because peer bootstrap is not
+# implemented. This file exists to *test* whether core clustering behaves, not
+# to document a deployment topology anyone should run.
+#
+# No Streamline image is published, so there is no runnable default image:
+# build one from the pinned core commit (`scripts/prepare-core-context.sh` then
+# `make docker`) and name it through STREAMLINE_IMAGE. The placeholder default
+# below is local-only and matches nothing in any registry.
+#
 # Usage:
-#   docker compose -f docker-compose.jepsen.yml up -d
+#   STREAMLINE_IMAGE=streamline:dev docker compose -f docker-compose.jepsen.yml up -d
 #   docker compose -f docker-compose.jepsen.yml exec jepsen-control ./run-tests.sh
 #   docker compose -f docker-compose.jepsen.yml down -v
 #
@@ -16,7 +27,7 @@ services:
   # ── Streamline Cluster (3 nodes) ────────────────────────────────────────────
 
   streamline-n1:
-    image: ghcr.io/streamlinelabs/streamline:0.3.0
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-n1
     hostname: streamline-n1
     environment:
@@ -43,7 +54,7 @@ services:
       retries: 10
 
   streamline-n2:
-    image: ghcr.io/streamlinelabs/streamline:0.3.0
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-n2
     hostname: streamline-n2
     environment:
@@ -70,7 +81,7 @@ services:
       retries: 10
 
   streamline-n3:
-    image: ghcr.io/streamlinelabs/streamline:0.3.0
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-n3
     hostname: streamline-n3
     environment:

@@ -16,10 +16,20 @@ data:
   # Storage configuration
   STREAMLINE_DATA_DIR: "/data"
 
-  # Network configuration (will be overridden per-pod for clustering)
+  # Topic management.
+  # Streamline core enables auto topic creation by default, so this variable
+  # must be set explicitly: omitting it silently leaves topics being created on
+  # first produce, which hides typos in client topic names and grows storage
+  # without an operator ever asking for it. Set to "true" only deliberately.
+  STREAMLINE_AUTO_CREATE_TOPICS: "false"
+
+  # Network configuration
   STREAMLINE_LISTEN_ADDR: "0.0.0.0:9092"
   STREAMLINE_HTTP_ADDR: "0.0.0.0:9094"
 
-  # Cluster configuration (for multi-node deployments)
+  # Cluster configuration is NOT supported by these manifests: they deploy a
+  # single standalone broker. Peer bootstrap (stable node IDs, seed nodes) is
+  # not implemented, so enabling the variables below would start brokers that
+  # neither replicate nor form a quorum.
   # STREAMLINE_CLUSTER_ENABLED: "true"
   # STREAMLINE_INTER_BROKER_PORT: "9093"

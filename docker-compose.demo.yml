@@ -3,8 +3,14 @@
 # Starts Streamline in playground mode and seeds demo topics with sample data.
 # Includes persistent volumes so data survives restarts.
 #
+# No Streamline image is published yet, so this stack has no runnable default
+# image. Build one from the pinned core commit and name it:
+#
+#   scripts/prepare-core-context.sh
+#   make docker                                   # -> streamline:dev
+#
 # Usage:
-#   docker compose -f docker-compose.demo.yml up -d
+#   STREAMLINE_IMAGE=streamline:dev docker compose -f docker-compose.demo.yml up -d
 #
 #   # Verify demo topics
 #   docker compose -f docker-compose.demo.yml exec streamline streamline-cli topics list
@@ -21,9 +27,7 @@
 
 services:
   streamline:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-demo
     ports:
       - "9092:9092"   # Kafka protocol

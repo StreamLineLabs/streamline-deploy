@@ -6,31 +6,68 @@
 # Quick start:
 #   helm install streamline ./helm/streamline
 #
-# Production (3-node cluster with monitoring):
+# Production-style single-broker deployment with monitoring:
 #   helm install streamline ./helm/streamline \
-#     --set replicaCount=3 \
 #     --set metrics.serviceMonitor.enabled=true \
 #     --set persistence.size=50Gi
 # =============================================================================
 
 # -- Number of Streamline broker replicas.
-# For production clusters, use 3 or 5 (odd numbers for Raft quorum).
+# Multi-broker peer bootstrap is not implemented by this chart yet. Values
+# greater than 1 fail rendering rather than create independent brokers.
 replicaCount: 1
 
 # -- Pod management policy for the StatefulSet.
 # "Parallel" starts all pods simultaneously (faster, good for single-node).
-# "OrderedReady" starts pods sequentially (safer for multi-node clusters).
-# Use "OrderedReady" when replicaCount > 1 with clustering enabled.
+# "OrderedReady" is reserved for future clustered deployments.
 podManagementPolicy: Parallel
 
-# -- Container image configuration
+# -- Container image configuration.
+# There is no default tag: no Streamline image is published yet, so the chart
+# refuses to render until you name an image you can actually pull.
 image:
-  # -- Docker image registry and name
+  # -- Docker image registry and name. This is where the project's images will
+  # be published (`.github/workflows/docker-publish.yml` pushes ghcr.io only);
+  # point it at your own registry until a release exists.
   repository: ghcr.io/streamlinelabs/streamline
-  # -- Image tag (defaults to chart appVersion if empty)
-  tag: "0.3.0"
+  # -- Image tag. REQUIRED — an empty value fails the render.
+  # No published tag exists: `docker-publish.yml` has pushed nothing while
+  # core-source.env carries no pinned core commit. Build an image from the
+  # pinned commit (`scripts/prepare-core-context.sh` then `make docker`), push
+  # it where the cluster can pull it, and set repository/tag explicitly.
+  tag: ""
   # -- Image pull policy: Always, IfNotPresent, or Never
   pullPolicy: IfNotPresent
+  # -- Edition of the image above; decides which optional chart features may be
+  # switched on. Enabling an unsupported feature fails the render rather than
+  # deploying a server that silently ignores it. The values mirror the
+  # STREAMLINE_EDITION build arg in Dockerfile:
+  #   standard — default cargo features (no STREAMLINE_FEATURES). TLS is
+  #              available (it is compiled into every build), but SASL auth and
+  #              clustering are not.
+  #   full     — STREAMLINE_EDITION=full, which accepts exactly
+  #              STREAMLINE_FEATURES=full (core's own meta-feature): adds SASL
+  #              auth and clustering. This is what the publisher builds.
+  #   custom   — STREAMLINE_EDITION=custom with an arbitrary
+  #              STREAMLINE_FEATURES list. The chart infers NOTHING from such a
+  #              build: image.capabilities below must declare what it supports.
+  # The experimental moonshot feature set is not advertised by any edition, and
+  # the chart cannot configure it yet: any moonshot.*.enabled=true fails the
+  # render (see the Moonshot Features section below).
+  edition: full
+  # -- Explicit capability list for custom images, e.g. ["auth", "clustering"].
+  # Accepted ONLY with edition: custom, where it is REQUIRED — a custom build's
+  # feature list is arbitrary, so the chart never guesses that it carries auth
+  # or clustering. Declare exactly what the image records in its
+  # dev.streamline.capabilities label.
+  # Recognised values: auth, clustering, moonshot, none.
+  # Use ["none"] for a custom build that supports none of them — an explicit
+  # "nothing" is still a declaration; an empty list is not.
+  # "moonshot" only describes what the image contains; it does not enable the
+  # moonshot settings below, which the chart still refuses to render.
+  # "tls" is accepted for backwards compatibility and ignored — TLS needs no
+  # capability because core builds it into the default binary.
+  capabilities: []
 
 # -- Secrets for pulling images from private registries
 imagePullSecrets: []
@@ -49,11 +86,18 @@ config:
   logLevel: info
   # -- Data directory for persistent segment storage
   dataDir: /data
-  # -- Kafka protocol listen address (clients connect here)
+  # -- Kafka protocol listen address (clients connect here).
+  # The port is FIXED at 9092: the container port, probes, Services and
+  # NetworkPolicy all hard-code it, so a different value would render a
+  # workload whose Service points at a port nothing listens on. Any other port
+  # fails the render (values.schema.json rejects it first).
   kafkaAddr: "0.0.0.0:9092"
-  # -- HTTP API listen address (REST, GraphQL, metrics, health checks)
+  # -- HTTP API listen address (REST, metrics, health checks).
+  # The port is FIXED at 9094, for the same reason as kafkaAddr.
   httpAddr: "0.0.0.0:9094"
   # -- Auto-create topics when a producer writes to a non-existent topic.
+  # Always rendered into the ConfigMap as STREAMLINE_AUTO_CREATE_TOPICS
+  # ("true"/"false") because Streamline core defaults this to enabled.
   # ⚠️  PRODUCTION: Set to false to prevent accidental topic creation from
   # typos or misconfigured clients. Use explicit topic provisioning instead.
   autoCreateTopics: false
@@ -64,26 +108,37 @@ config:
   # Use for CI/CD testing. All data is lost on restart.
   ephemeral: false
   # -- Extra CLI arguments passed directly to the streamline binary.
-  # Example: ["--features", "analytics", "--max-message-size", "10485760"]
+  # Only flags the pinned image actually accepts belong here; an unknown flag
+  # makes the server exit at startup.
+  # Example: ["--max-message-bytes", "10485760"]
   extraArgs: []
-  # -- Enable clustering (multi-node Raft consensus).
-  # Requires replicaCount >= 3 for quorum.
-  # clusterEnabled: false
-  # -- Inter-broker communication port (used for Raft replication).
-  # Must be different from kafkaAddr port.
-  # interBrokerPort: 9093
+  # -- Reserved for future multi-node Raft bootstrap.
+  # Enabling this currently fails rendering.
+  clusterEnabled: false
+  # -- Inter-broker communication port (reserved for Raft replication).
+  # FIXED at 9093: the headless Service and the container port hard-code it,
+  # and clustering is rejected by this chart anyway.
+  interBrokerPort: 9093
 
 # =============================================================================
 # Networking
 # =============================================================================
+# The listener ports are FIXED. 9092 (Kafka) and 9094 (HTTP) are hard-coded in
+# the container `ports:`, the named ports the probes and Services target, the
+# NetworkPolicy rules, the ServiceMonitor endpoint and the Prometheus scrape
+# annotations. Values that pretend to move a listener are rejected — both by
+# values.schema.json and by the chart's own guard — because changing one of
+# them produced a broker that never became ready and a Service pointing at a
+# port nothing served. Publish a different port outside the pod instead (your
+# own Service, an ingress, or `kubectl port-forward`).
 
 # -- Internal ClusterIP service configuration
 service:
   # -- Service type: ClusterIP, NodePort, LoadBalancer
   type: ClusterIP
-  # -- Kafka protocol port
+  # -- Kafka protocol port. Fixed at 9092; other values fail the render.
   kafkaPort: 9092
-  # -- HTTP API port
+  # -- HTTP API port. Fixed at 9094; other values fail the render.
   httpPort: 9094
   # -- Additional annotations (e.g., for service mesh)
   annotations: {}
@@ -94,7 +149,8 @@ externalService:
   enabled: false
   # -- External service type
   type: LoadBalancer
-  # -- External Kafka port
+  # -- External Kafka port. Fixed at 9092: it targets the same fixed container
+  # port. Map a different external port with a Service of your own.
   kafkaPort: 9092
   # -- Annotations (e.g., cloud provider LB config)
   annotations: {}
@@ -272,6 +328,8 @@ metrics:
 
 # -- Network policy restricts pod-to-pod traffic.
 # Default: only pods in the same namespace can access Kafka and HTTP ports.
+# The ports are fixed at 9092/9094 (the only ports the workload listens on);
+# any other value here fails the render. Use additionalIngress for extra rules.
 networkPolicy:
   enabled: true
   ingress:
@@ -288,12 +346,21 @@ networkPolicy:
   additionalEgress: []
 
 # =============================================================================
-# Autoscaling
+# Autoscaling — NOT SUPPORTED YET
 # =============================================================================
+# WARNING: this chart cannot scale Streamline horizontally. An autoscaler edits
+# the StatefulSet's replica count directly, which would bypass the
+# `replicaCount > 1` guard and start extra pods as independent brokers with
+# their own data — not as cluster members, because peer bootstrap is not
+# implemented (see config.clusterEnabled). Setting autoscaling.enabled or
+# keda.enabled to true therefore FAILS THE RENDER. The keys below are kept to
+# document the intended shape once clustered mode exists. Scale vertically with
+# `resources` in the meantime.
 
 # -- Horizontal Pod Autoscaler (standard Kubernetes HPA).
-# Note: HPA and KEDA are mutually exclusive — enable only one.
+# Unsupported: `enabled: true` fails the render until clustered mode exists.
 autoscaling:
+  # -- Enable the HPA. Must stay false; true fails the render.
   enabled: false
   minReplicas: 1
   maxReplicas: 5
@@ -325,6 +392,10 @@ serviceAccount:
 
 # -- Ingress for HTTP API access from outside the cluster.
 # Only exposes the HTTP API (port 9094); Kafka protocol requires a LoadBalancer.
+# This is also where HTTPS for the HTTP API belongs: the `tls` section further
+# down configures the *Kafka* listener and does nothing for HTTP, so put a
+# certificate in the ingress `tls:` list below (or terminate at a reverse proxy
+# / service mesh) if the management API must not travel in the clear.
 ingress:
   enabled: false
   # -- Ingress class name (e.g., "nginx", "traefik")
@@ -348,46 +419,94 @@ ingress:
 # Security — TLS & Authentication
 # =============================================================================
 
-# -- TLS configuration for encrypting Kafka protocol and HTTP API traffic
+# -- TLS for the KAFKA PROTOCOL LISTENER (port 9092) only.
+#
+# SCOPE — read this before assuming a setting here protects an endpoint:
+#   * The variables the chart renders (STREAMLINE_TLS_*) configure the server's
+#     Kafka listener. Kafka clients then speak TLS to :9092.
+#   * The HTTP API on :9094 is NOT covered. Health checks, metrics and the
+#     management API keep serving plaintext HTTP inside the cluster, and the
+#     chart's probes target them over plain HTTP. Terminate TLS for HTTP at an
+#     ingress controller, a service mesh or a reverse proxy in front of the
+#     Service (see the `ingress` section above, whose `tls:` list is the
+#     supported way to serve HTTPS).
+#   * clientAuth is mutual TLS for Kafka clients only. There is no HTTP mTLS
+#     here: nothing in this chart asks the HTTP listener for a client
+#     certificate, so do not treat it as an authentication boundary.
+#
+# TLS is compiled into every Streamline build, so no image capability is
+# required — a custom standard-edition build can terminate Kafka TLS just as
+# well as the full edition.
+#
+# The certificate material is mounted read-only at tls.mountPath and the file
+# locations are handed to the server through the STREAMLINE_TLS_CERT,
+# STREAMLINE_TLS_KEY, STREAMLINE_TLS_CA_CERT and
+# STREAMLINE_TLS_REQUIRE_CLIENT_CERT environment variables
+# (see templates/configmap.yaml).
 tls:
-  # -- Enable TLS on both Kafka and HTTP ports
+  # -- Enable TLS on the Kafka protocol listener (9092). The HTTP API (9094)
+  # is unaffected; use ingress/reverse-proxy TLS for it.
   enabled: false
   # -- Base64-encoded PEM certificate (or use existingSecret)
   certData: ""
   # -- Base64-encoded PEM private key
   keyData: ""
-  # -- Base64-encoded PEM CA certificate for client verification (mTLS)
+  # -- Base64-encoded PEM CA certificate for verifying Kafka client
+  # certificates (mTLS)
   caData: ""
   # -- Use an existing Kubernetes Secret instead of inline cert data.
-  # Secret must contain tls.crt, tls.key, and optionally ca.crt keys.
+  # Secret must contain tls.crt, tls.key, and optionally ca.crt keys
+  # (the standard kubernetes.io/tls layout). When set, the chart mounts that
+  # Secret and generates none of its own. It secures the Kafka listener only —
+  # it is not an HTTPS certificate for the HTTP API.
   existingSecret: ""
+  # -- Where the certificate material is mounted inside the container
+  mountPath: /etc/streamline/tls
+  # -- Require client certificates from KAFKA clients (mTLS on 9092). Needs
+  # caData, or an existingSecret that contains ca.crt. This does not apply to
+  # the HTTP API.
+  clientAuth: false
 
-# -- SASL authentication configuration
+# -- SASL authentication configuration.
+# Requires image.edition=full (or "auth" in image.capabilities); the chart
+# refuses to render otherwise instead of deploying an unauthenticated broker.
+#
+# Streamline core authenticates against a YAML *users file* that contains
+# precomputed password hashes / SCRAM credentials. It does NOT read a username
+# or password from the environment, so the chart cannot generate credentials
+# for you: create the users file yourself, put it in a Secret, and point
+# auth.existingSecret at it. The Secret is mounted read-only and the server is
+# pointed at it through STREAMLINE_AUTH_USERS_FILE.
+#
+# Example:
+#   kubectl create secret generic streamline-auth --from-file=users.yaml
 auth:
   # -- Enable authentication on Kafka protocol connections
   enabled: false
   sasl:
-    # -- SASL mechanism: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
-    mechanism: SCRAM-SHA-256
-    # -- Admin username
-    username: ""
-    # -- Admin password (use existingSecret in production)
-    password: ""
-  # -- Use an existing Secret for auth credentials.
-  # Secret must contain "username" and "password" keys.
+    # -- SASL mechanisms to advertise, passed to the server as a
+    # comma-separated STREAMLINE_AUTH_SASL_MECHANISMS list.
+    # Supported values: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512.
+    mechanisms:
+      - SCRAM-SHA-256
+  # -- Existing Secret holding the users file. REQUIRED when enabled is true.
   existingSecret: ""
-  # -- Additional secrets mounted as files (e.g., user credential files)
-  extraSecrets: {}
+  # -- Key inside existingSecret that holds the YAML users file
+  usersFileKey: users.yaml
+  # -- Where the users file is mounted read-only inside the container
+  mountPath: /etc/streamline/auth
 
 # =============================================================================
-# KEDA Autoscaling
+# KEDA Autoscaling — NOT SUPPORTED YET
 # =============================================================================
 
 # -- KEDA-based autoscaling for event-driven scaling.
-# Requires KEDA operator installed in the cluster.
-# Note: mutually exclusive with autoscaling.enabled.
+# Unsupported for the same reason as `autoscaling` above: a ScaledObject scales
+# the StatefulSet past one replica, producing independent brokers rather than a
+# cluster. `enabled: true` FAILS THE RENDER until peer bootstrap exists; a KEDA
+# operator in the cluster does not change that.
 keda:
-  # -- Enable KEDA ScaledObject
+  # -- Enable the KEDA ScaledObject. Must stay false; true fails the render.
   enabled: false
   # -- How often KEDA checks the trigger (seconds)
   pollingInterval: 15
@@ -411,9 +530,13 @@ keda:
 # =============================================================================
 # Moonshot Features (Experimental)
 # =============================================================================
-# WARNING: These features are EXPERIMENTAL and not included in the default
-# build. Enable only for evaluation or design-partner deployments.
-# They require the Streamline binary to be compiled with --features moonshot.
+# WARNING: This chart cannot configure moonshot features yet. None of these
+# settings are rendered into the ConfigMap or the container arguments, so
+# switching any of them on FAILS THE RENDER rather than deploying a server that
+# ignores them. Declaring "moonshot" in image.capabilities does not change that;
+# it only describes what the image contains.
+# The keys below are kept to document the intended shape of the configuration
+# once the wiring exists.
 # See docs/reference/feature-flags.md for details.
 moonshot:
   # -- Semantic Topics (M2): embed-on-write vector indexing for semantic search

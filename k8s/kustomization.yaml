@@ -20,10 +20,15 @@ commonLabels:
   app.kubernetes.io/part-of: streamline
   app.kubernetes.io/managed-by: kustomize
 
-# Image customization
-# Override with: kustomize edit set image streamline=your-registry/streamline:v1.0.0
+# Image customization.
+#
+# No Streamline image is published yet: `docker-publish.yml` has pushed no tag
+# while core-source.env carries no pinned commit, so the base deliberately
+# references an unpullable placeholder instead of a release tag that does not
+# exist. Build an image from the pinned core commit (see k8s/README.md), then:
+#   kustomize edit set image streamline=<registry>/streamline:<tag>
 images:
   - name: streamline
     newName: streamline
-    newTag: latest
+    newTag: "set-image-before-apply"
 

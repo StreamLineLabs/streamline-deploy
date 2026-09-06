@@ -2,14 +2,29 @@
 
 Pre-built monitoring configurations for Streamline deployments.
 
+> ⚠️ **Metric names in these dashboards and alert rules are unverified.**
+> None of the `streamline_*` metrics used here has been confirmed against the
+> metrics Streamline core actually emits (audit finding DEP-D-1), so panels may
+> render empty and alerts may never fire. See
+> [METRICS.md](METRICS.md) for the full contract, the known conflicting name
+> variants, and how to verify against a running server.
+
 ## Quick Start
 
 ### Prometheus + Grafana (Docker Compose)
 
 ```bash
-# From the streamline-deploy directory:
-docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
+# From the streamline-deploy directory. STREAMLINE_IMAGE names an image you
+# built (`make docker`); no Streamline image is published, so the base stack
+# has no runnable default.
+STREAMLINE_IMAGE=streamline:dev \
+  docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
 ```
+
+`monitoring/docker-compose.monitoring.yml` is an overlay: it adds Prometheus and
+Grafana to the base stack and depends on its `streamline` service, so it is
+always used together with `docker-compose.yml` (on its own, `docker compose
+config` correctly reports an undefined dependency).
 
 This starts Streamline with Prometheus scraping metrics from `:9094/metrics` and Grafana dashboards pre-loaded.
 

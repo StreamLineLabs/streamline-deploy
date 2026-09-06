@@ -1,5 +1,8 @@
 # Streamline StatefulSet
-# Deploys Streamline with persistent storage and stable network identities
+# Deploys a single standalone Streamline broker with persistent storage and a
+# stable network identity. These manifests do NOT deploy a cluster: peer
+# bootstrap is not implemented, so extra replicas would be independent brokers
+# with their own data and topic metadata — not replicas of each other.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -10,7 +13,7 @@ metadata:
     app.kubernetes.io/component: server
 spec:
   serviceName: streamline-headless
-  replicas: 1  # Start with 1, scale to 3 for production cluster
+  replicas: 1  # Standalone broker: do not scale up, there is no clustering yet
   podManagementPolicy: Parallel
   selector:
     matchLabels:
@@ -32,13 +35,22 @@ spec:
         runAsUser: 1000
       containers:
         - name: streamline
-          image: ghcr.io/streamlinelabs/streamline:0.3.0
+          # No Streamline image is published yet, so this base carries a
+          # deliberately unpullable placeholder rather than a release tag that
+          # nobody has pushed. Build an image from the pinned core commit
+          # (see k8s/README.md → "Build the image"), then point this base at it:
+          #   kustomize edit set image streamline=<registry>/streamline:<tag>
+          # Applying it unchanged fails with ImagePullBackOff — visibly, not
+          # silently.
+          image: streamline:set-image-before-apply
           imagePullPolicy: IfNotPresent
           ports:
             - name: kafka
               containerPort: 9092
               protocol: TCP
             - name: inter-broker
+              # Reserved for clustered mode, which is not implemented yet;
+              # nothing connects to this port in a standalone deployment.
               containerPort: 9093
               protocol: TCP
             - name: http
@@ -48,7 +60,8 @@ spec:
             - configMapRef:
                 name: streamline-config
           env:
-            # Pod identity for clustering (uses StatefulSet ordinal)
+            # Pod identity (exposed for logging/debugging; clustering is not
+            # supported by these manifests)
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -57,7 +70,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            # For cluster mode, set node ID based on pod ordinal
+            # Cluster mode is not supported yet (no peer bootstrap); leaving
+            # this commented out is deliberate.
             # - name: STREAMLINE_NODE_ID
             #   value: "$(POD_NAME)"
           resources:

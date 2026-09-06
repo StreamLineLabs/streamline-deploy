@@ -9,6 +9,10 @@ templates:
 # ServiceAccount Tests
 # ==============================================================================
 
+values:
+  # The chart ships no default image.tag (nothing is published yet), so every
+  # suite names an explicit test image — see tests/values/test-image.yaml.
+  - values/test-image.yaml
 tests:
   - it: should create a ServiceAccount by default
     template: serviceaccount.yaml
@@ -38,7 +42,7 @@ tests:
         eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/streamline
     asserts:
       - equal:
-          path: metadata.annotations.eks\.amazonaws\.com/role-arn
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
           value: "arn:aws:iam::123456789:role/streamline"
 
   - it: should not create ServiceAccount when disabled
@@ -135,10 +139,10 @@ tests:
               pathType: Prefix
     asserts:
       - equal:
-          path: metadata.annotations.nginx\.ingress\.kubernetes\.io/proxy-body-size
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]
           value: "10m"
       - equal:
-          path: metadata.annotations.cert-manager\.io/cluster-issuer
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
           value: letsencrypt
 
   - it: should set correct backend service port
@@ -190,24 +194,16 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should create auth Secret when auth is enabled
+  # The chart never generates an auth Secret: core authenticates against a YAML
+  # users file with precomputed hashes, which cannot be derived from values.
+  - it: should not create an auth Secret when auth is enabled
     template: secret.yaml
     set:
       auth.enabled: true
-      auth.sasl.username: admin
-      auth.sasl.password: secret123
+      auth.existingSecret: streamline-auth
     asserts:
-      - isKind:
-          of: Secret
-        documentIndex: 0
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-streamline-auth
-        documentIndex: 0
-      - equal:
-          path: type
-          value: Opaque
-        documentIndex: 0
+      - hasDocuments:
+          count: 0
 
   - it: should create TLS Secret when TLS is enabled
     template: secret.yaml
@@ -222,32 +218,20 @@ tests:
           path: type
           value: kubernetes.io/tls
 
-  - it: should create both Secrets when auth and TLS enabled
+  - it: should create only the TLS Secret when auth and TLS are enabled
     template: secret.yaml
     set:
       auth.enabled: true
-      auth.sasl.username: admin
-      auth.sasl.password: pass
+      auth.existingSecret: streamline-auth
       tls.enabled: true
       tls.certData: cert
       tls.keyData: key
     asserts:
       - hasDocuments:
-          count: 2
-
-  - it: should include extra secrets
-    template: secret.yaml
-    set:
-      auth.enabled: true
-      auth.sasl.username: admin
-      auth.sasl.password: pass
-      auth.extraSecrets:
-        oauth-client-id: my-client
-        oauth-client-secret: my-secret
-    asserts:
-      - isKind:
-          of: Secret
-        documentIndex: 0
+          count: 1
+      - equal:
+          path: type
+          value: kubernetes.io/tls
 
   - it: should include CA cert in TLS Secret
     template: secret.yaml

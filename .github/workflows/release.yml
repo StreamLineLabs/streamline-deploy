@@ -1,33 +1,74 @@
+# =============================================================================
+# Release — packages the Helm chart. It does NOT publish anything.
+# =============================================================================
+# Image publishing is owned exclusively by `docker-publish.yml`; this workflow
+# must never push container tags (two publishers previously raced on the same
+# tags). Chart publication to a Helm repository / OCI registry is deliberately
+# NOT performed here: no chart repository is configured for this project, so
+# the packaged chart is attached to the workflow run as an artifact and a
+# maintainer promotes it manually.
+# =============================================================================
 name: Release
+
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  docker:
+  package-chart:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install validation dependencies
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.1.2 --verify=false
+
+      - name: Lint and unit-test the chart
+        # The chart ships no default image.tag — no image is published, so it
+        # refuses to render without one. Lint is about template health, so it
+        # gets an explicit (local, never-pulled) test image, exactly like
+        # `make helm-lint`. The unit tests supply their own via
+        # helm/streamline/tests/values/test-image.yaml.
+        run: |
+          helm lint helm/streamline \
+            --set image.repository=streamline --set image.tag=helm-validate
+          helm unittest helm/streamline
+
+      - name: Verify chart version matches the release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          chart="$(grep -E '^version:' helm/streamline/Chart.yaml | awk '{print $2}')"
+          if [ "$tag" != "$chart" ]; then
+            echo "release tag $tag does not match chart version $chart" >&2
+            exit 1
+          fi
+          echo "chart version $chart matches tag $GITHUB_REF_NAME"
+
+      - name: Package chart
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          helm package helm/streamline --destination dist
+          ( cd dist && sha256sum ./*.tgz > SHA256SUMS )
+          cat dist/SHA256SUMS
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ghcr.io/streamlinelabs/streamline
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-      - uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: streamline-helm-chart
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90

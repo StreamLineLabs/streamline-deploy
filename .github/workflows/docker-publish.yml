@@ -1,27 +1,183 @@
-name: Docker Publish
+# =============================================================================
+# Publish Image — the SINGLE publisher of the official Streamline image.
+# =============================================================================
+# No other workflow in this repository may push container tags. `release.yml`
+# packages the Helm chart only; keeping one publisher removes the tag race that
+# occurred when two workflows pushed the same tags from the same git ref.
+#
+# The image is built from the Streamline *core* sources checked out explicitly
+# at the immutable commit pinned in core-source.env — this repository contains
+# no Rust sources, so the build context is prepared, never assumed.
+#
+# Publish order (enforced by tests/publish-pipeline_test.sh):
+#
+#   1. `build-and-verify` pushes ONE staging reference
+#      (`:staging-<run id>-<attempt>`) and records the resulting digest. No
+#      semver, major-minor or `latest` tag is written at this point, so a build
+#      that fails validation never becomes a public release tag. The staging
+#      tag is an internal build artefact: no deployment artifact in this
+#      repository references it.
+#   2. Every validation runs against `…@<digest>` — never against a tag, which
+#      could be re-pointed between steps: strict compose smoke test, Trivy scan
+#      (CRITICAL/HIGH, exit-code 1), SBOM generation, cosign signature and
+#      SBOM/provenance attestations.
+#   3. `promote` (a separate job, so it cannot start before every validation
+#      step of stage 1 succeeded) copies THAT EXACT DIGEST onto the public tags
+#      with `docker buildx imagetools create`, then verifies every published
+#      tag resolves back to the same digest. Nothing is rebuilt, so the bits
+#      that were scanned and signed are the bits that get released.
+#
+# `docker/metadata-action` is used in `promote` only, to compute the public tag
+# list. It must never feed the initial push: that is exactly how an unvalidated
+# build used to land on `latest`.
+#
+# Only linux/amd64 is published for now. A multi-platform index must not include
+# an architecture that has not been smoke-tested and scanned; linux/arm64 can
+# be restored once the workflow has an arm64 execution and scan lane.
+# =============================================================================
+name: Publish Image
+
 on:
   push:
-    branches: [main]
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: 'Validation-only override of the pinned core commit SHA (full 40-character SHA; never promoted)'
+        required: false
+        type: string
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: streamlinelabs/streamline
+  CORE_CONTEXT: .build/core
+
 permissions:
   contents: read
   packages: write
   security-events: write
   id-token: write   # required for cosign keyless OIDC + SLSA provenance
   attestations: write
+
+# Serialize publishes so two refs can never write the same tag concurrently.
+concurrency:
+  group: publish-image
+  cancel-in-progress: false
+
 jobs:
-  docker-publish:
+  # ---------------------------------------------------------------------------
+  # Resolve the immutable core input and bind release tags to the core package
+  # version before any image build can begin. Manual dispatches have no release
+  # tag, so they use the pinned core version for validation labels only and can
+  # never promote it.
+  # ---------------------------------------------------------------------------
+  release-contract:
     runs-on: ubuntu-latest
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      core_ref: ${{ steps.core.outputs.ref }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout deployment artifacts
+        uses: actions/checkout@v4
+
+      - name: Resolve pinned core commit
+        id: core
+        env:
+          CORE_REF_INPUT: ${{ inputs.core_ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CORE_REF_INPUT:-}" ]; then
+            ref="$(scripts/prepare-core-context.sh --ref "$CORE_REF_INPUT" --print-ref)"
+          else
+            ref="$(scripts/prepare-core-context.sh --print-ref)"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Streamline core at the pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: streamlinelabs/streamline
+          ref: ${{ steps.core.outputs.ref }}
+          path: ${{ env.CORE_CONTEXT }}
+          persist-credentials: false
+
+      - name: Bind push tag to pinned core Cargo version
+        id: version
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          core_version="$(
+            awk -F'"' '
+              /^\[package\]/ { in_package = 1; next }
+              /^\[/ { in_package = 0 }
+              in_package && /^version[[:space:]]*=/ { print $2; exit }
+            ' "${CORE_CONTEXT}/Cargo.toml"
+          )"
+          if ! printf '%s' "${core_version}" |
+            grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::pinned core Cargo.toml has no valid package version"
+            exit 1
+          fi
+
+          version="${core_version}"
+          if [ "${RELEASE_EVENT}" = "push" ]; then
+            case "${RELEASE_TAG}" in
+              v*) tag_version="${RELEASE_TAG#v}" ;;
+              *)
+                echo "::error::release tag must begin with v; got '${RELEASE_TAG}'"
+                exit 1
+                ;;
+            esac
+            if [ "${tag_version}" != "${core_version}" ]; then
+              echo "::error::release tag ${RELEASE_TAG} does not match pinned core Cargo version ${core_version}"
+              exit 1
+            fi
+            version="${tag_version}"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "pinned core release contract: ${version}"
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — build a staging reference and validate the digest it produced.
+  # Nothing public is written by this job.
+  # ---------------------------------------------------------------------------
+  build-and-verify:
+    needs: [release-contract]
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+      digest_ref: ${{ steps.digest.outputs.ref }}
+      staging_ref: ${{ steps.staging.outputs.ref }}
+      core_ref: ${{ needs.release-contract.outputs.core_ref }}
+      version: ${{ needs.release-contract.outputs.version }}
       image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout deployment artifacts
+        uses: actions/checkout@v4
 
-      - uses: docker/setup-qemu-action@v3
+      - name: Checkout Streamline core at the pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: streamlinelabs/streamline
+          ref: ${{ needs.release-contract.outputs.core_ref }}
+          path: ${{ env.CORE_CONTEXT }}
+          persist-credentials: false
+
+      - name: Verify the core checkout matches the pin
+        env:
+          EXPECTED_REF: ${{ needs.release-contract.outputs.core_ref }}
+        run: |
+          set -euo pipefail
+          actual="$(git -C "${CORE_CONTEXT}" rev-parse HEAD)"
+          expected="${EXPECTED_REF}"
+          if [ "$actual" != "$expected" ]; then
+            echo "core checkout is $actual but $expected was pinned" >&2
+            exit 1
+          fi
+          echo "core sources verified at $actual"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -31,83 +187,84 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Compute the staging reference
+        id: staging
+        # Unique per run and per attempt, so a re-run never reuses another
+        # run's staged bits, and never collides with a release tag.
+        run: |
+          set -euo pipefail
+          ref="${REGISTRY}/${IMAGE_NAME}:staging-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "staging reference: $ref"
 
-      - uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: |
-            ghcr.io/streamlinelabs/streamline
-            streamlinelabs/streamline
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.sha }}
-
-      - uses: docker/build-push-action@v5
+      - name: Build and push the staging reference (no public tags)
         id: build
+        uses: docker/build-push-action@v5
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
+          # Build context is the pinned core checkout, not this repository.
+          context: ${{ env.CORE_CONTEXT }}
+          file: Dockerfile
+          build-args: |
+            STREAMLINE_EDITION=full
+            STREAMLINE_FEATURES=full
+            STREAMLINE_VERSION=${{ needs.release-contract.outputs.version }}
+            STREAMLINE_CORE_REF=${{ needs.release-contract.outputs.core_ref }}
+          # Publish only the platform validated by the smoke and scan steps
+          # below. Do not add arm64 to this list without matching validation.
+          platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.staging.outputs.ref }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.release-contract.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.release-contract.outputs.core_ref }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
 
-      # ---- Supply-chain hardening ----------------------------------------
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.4.1'
-
-      - name: Sign image (keyless, OIDC)
+      - name: Pin the digest every validation runs against
+        id: digest
         env:
-          COSIGN_EXPERIMENTAL: 'true'
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
-          while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            echo "Signing ${tag}@${DIGEST}"
-            cosign sign --yes "${tag}@${DIGEST}"
-          done <<< "${TAGS}"
+          case "${BUILD_DIGEST:-}" in
+            sha256:*) ;;
+            *) echo "build produced no image digest ('${BUILD_DIGEST:-}')" >&2; exit 1 ;;
+          esac
+          echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "ref=${REGISTRY}/${IMAGE_NAME}@${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "validating ${REGISTRY}/${IMAGE_NAME}@${BUILD_DIGEST}"
 
-      - name: Generate SBOM (SPDX) for ghcr image
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          format: spdx-json
-          output-file: sbom.spdx.json
-
-      - name: Attest SBOM with cosign
+      # ---- Validation: strict smoke test ---------------------------------
+      # No `|| true` anywhere: the smoke stack creates a topic, produces and
+      # consumes, and every one of those assertions must execute and pass
+      # (docker-compose.test.yml, gated by tests/publish-pipeline_test.sh).
+      - name: Smoke test the staged digest
         env:
-          COSIGN_EXPERIMENTAL: 'true'
+          STREAMLINE_IMAGE: ${{ steps.digest.outputs.ref }}
+          EXPECTED_VERSION: ${{ needs.release-contract.outputs.version }}
         run: |
-          cosign attest --yes \
-            --predicate sbom.spdx.json \
-            --type spdxjson \
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          set -euo pipefail
+          docker compose -f docker-compose.test.yml up \
+            --abort-on-container-exit --exit-code-from smoke-test
+          actual_version="$(
+            docker image inspect "${STREAMLINE_IMAGE}" \
+              --format '{{ index .Config.Labels "org.opencontainers.image.version" }}'
+          )"
+          if [ "${actual_version}" != "${EXPECTED_VERSION}" ]; then
+            echo "::error::staged image version label is '${actual_version}', expected '${EXPECTED_VERSION}'"
+            exit 1
+          fi
+          docker compose -f docker-compose.test.yml down -v
 
-      - name: Generate build provenance attestation
-        uses: actions/attest-build-provenance@v1
+      # ---- Validation: vulnerability scan ---------------------------------
+      - name: Scan the staged digest for vulnerabilities
+        # v0.36.0; pin the verified release commit rather than a mutable tag.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-      # ---- Vulnerability scanning ----------------------------------------
-      - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          image-ref: ${{ steps.digest.outputs.ref }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -115,23 +272,145 @@ jobs:
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
+        # Findings are uploaded even when the scan step failed the job; the
+        # scan's own exit code still blocks promotion.
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
+      # ---- Validation: supply-chain material for the digest ---------------
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Sign the staged digest (keyless, OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: 'true'
+          DIGEST_REF: ${{ steps.digest.outputs.ref }}
+        run: |
+          set -euo pipefail
+          # Signing the digest covers every tag that will later point at it:
+          # cosign stores the signature under the digest, not under a tag.
+          cosign sign --yes "${DIGEST_REF}"
+
+      - name: Generate SBOM (SPDX) for the staged digest
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.digest.outputs.ref }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Attest SBOM with cosign
+        env:
+          COSIGN_EXPERIMENTAL: 'true'
+          DIGEST_REF: ${{ steps.digest.outputs.ref }}
+        run: |
+          set -euo pipefail
+          cosign attest --yes \
+            --predicate sbom.spdx.json \
+            --type spdxjson \
+            "${DIGEST_REF}"
+
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — promote the validated digest to the public tags.
+  #
+  # `needs: build-and-verify` is the ordering guarantee: this job cannot start
+  # unless every validation step above succeeded. It rebuilds nothing; it copies
+  # the manifest from the validated digest, so the released bits are exactly the
+  # scanned, signed bits.
+  #
+  # Runs for release-tag pushes only. A `workflow_dispatch` run validates a
+  # build and publishes no public tag, even when the dispatcher selects an
+  # existing tag ref or supplies core_ref.
+  # ---------------------------------------------------------------------------
+  promote:
+    needs: [build-and-verify]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag computation only — this action publishes nothing. It runs here,
+      # after validation, and never feeds the build step in stage 1.
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/streamlinelabs/streamline
+          # Immutable tags only. `latest` is published exclusively for
+          # non-prerelease release tags, never for branch pushes.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=core-${{ needs.build-and-verify.outputs.core_ref }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+
+      - name: Promote the validated digest to the public tags
+        env:
+          DIGEST_REF: ${{ needs.build-and-verify.outputs.digest_ref }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          args=""
+          count=0
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            args="$args --tag $tag"
+            count=$((count + 1))
+          done <<< "${TAGS}"
+          if [ "$count" -eq 0 ]; then
+            echo "no public tags were computed for ${GITHUB_REF}; refusing to promote" >&2
+            exit 1
+          fi
+          echo "promoting ${DIGEST_REF} to ${count} tag(s)"
+          # shellcheck disable=SC2086  # args is a deliberately word-split list
+          docker buildx imagetools create $args "${DIGEST_REF}"
+
+      - name: Verify every public tag resolves to the validated digest
+        env:
+          DIGEST: ${{ needs.build-and-verify.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            actual="$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r '.digest')"
+            if [ "$actual" != "${DIGEST}" ]; then
+              echo "tag $tag resolves to $actual, not the validated digest ${DIGEST}" >&2
+              exit 1
+            fi
+            echo "  ✓ $tag -> $actual"
+          done <<< "${TAGS}"
+
   # SLSA Level 3 provenance (separate reusable workflow per slsa-framework spec)
+  # for the promoted digest.
   slsa-provenance:
-    needs: [docker-publish]
+    needs: [build-and-verify, promote]
     permissions:
       actions: read
       id-token: write
       packages: write
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
     with:
-      image: ${{ needs.docker-publish.outputs.image }}
-      digest: ${{ needs.docker-publish.outputs.digest }}
+      image: ${{ needs.build-and-verify.outputs.image }}
+      digest: ${{ needs.build-and-verify.outputs.digest }}
       registry-username: ${{ github.actor }}
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
-

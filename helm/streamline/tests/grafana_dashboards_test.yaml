@@ -1,0 +1,69 @@
+suite: Streamline Grafana dashboards
+templates:
+  - grafana-overview.yaml
+  - grafana-consumer-lag.yaml
+  - grafana-topics.yaml
+
+values:
+  # The chart ships no default image.tag (nothing is published yet), so every
+  # suite names an explicit test image — see tests/values/test-image.yaml.
+  - values/test-image.yaml
+tests:
+  - it: should create one ConfigMap per dashboard template by default
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should create the overview dashboard
+    template: grafana-overview.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-grafana-overview
+      - exists:
+          path: data["streamline-overview.json"]
+
+  - it: should mark dashboard metric names as unverified
+    template: grafana-overview.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["streamline.dev/metric-status"]
+          value: unverified
+
+  - it: should create the consumer lag dashboard
+    template: grafana-consumer-lag.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-grafana-consumer-lag
+      - exists:
+          path: data["streamline-consumer-lag.json"]
+
+  - it: should create the topics dashboard
+    template: grafana-topics.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-streamline-grafana-topics
+      - exists:
+          path: data["streamline-topics.json"]
+
+  - it: should create no dashboards when metrics are disabled
+    set:
+      metrics.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create no dashboards when dashboard discovery is disabled
+    set:
+      metrics.grafanaDashboards.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

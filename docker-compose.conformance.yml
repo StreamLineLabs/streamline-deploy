@@ -1,10 +1,17 @@
 # SDK Conformance Test Infrastructure
-# Pre-configured Streamline server with all features for SDK testing
-version: "3.8"
+# Pre-configured Streamline server for SDK testing.
+#
+# No Streamline image is published yet, so there is no runnable default image:
+# build one from the pinned core commit (`scripts/prepare-core-context.sh` then
+# `make docker STREAMLINE_EDITION=full STREAMLINE_FEATURES=full`, which is the
+# edition that carries SASL auth) and name it through STREAMLINE_IMAGE:
+#
+#   STREAMLINE_IMAGE=streamline:dev \
+#     docker compose -f docker-compose.conformance.yml up -d
 
 services:
   streamline-conformance:
-    image: ghcr.io/streamlinelabs/streamline:0.3.0
+    image: ${STREAMLINE_IMAGE:-streamline:set-STREAMLINE_IMAGE}
     container_name: streamline-conformance
     ports:
       - "19092:9092"    # Kafka protocol

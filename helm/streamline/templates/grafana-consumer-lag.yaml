@@ -1,0 +1,38 @@
+{{- if and .Values.metrics.enabled .Values.metrics.grafanaDashboards.enabled -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "streamline.grafanaDashboardMetadata" (dict "root" . "name" "consumer-lag") | nindent 2 }}
+data:
+  streamline-consumer-lag.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "panels": [
+        {
+          "title": "Consumer Group Lag",
+          "type": "timeseries",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+          "targets": [{ "expr": "streamline_consumer_group_lag", "legendFormat": "{{`{{group}}`}} / {{`{{topic}}`}}-{{`{{partition}}`}}" }]
+        },
+        {
+          "title": "Consumer Fetch Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "targets": [{ "expr": "rate(streamline_consumer_fetch_total[5m])", "legendFormat": "{{`{{group}}`}}" }]
+        },
+        {
+          "title": "Commit Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "targets": [{ "expr": "rate(streamline_consumer_commit_total[5m])", "legendFormat": "{{`{{group}}`}}" }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["streamline", "consumer"],
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Streamline Consumer Lag",
+      "uid": "streamline-consumer-lag"
+    }
+{{- end }}

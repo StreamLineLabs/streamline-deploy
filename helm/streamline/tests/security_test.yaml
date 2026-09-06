@@ -1,0 +1,842 @@
+suite: Streamline image capabilities, args and security wiring
+templates:
+  - statefulset.yaml
+  - configmap.yaml
+  - secret.yaml
+values:
+  # The chart ships no default image.tag (nothing is published yet), so every
+  # suite names an explicit test image — see tests/values/test-image.yaml.
+  - values/test-image.yaml
+tests:
+  # ==========================================================================
+  # Image edition / capability gating
+  #
+  # TLS is compiled into every Streamline build, so it is deliberately NOT
+  # gated. Auth and clustering are; moonshot is gated and advertised by no
+  # edition at all.
+  # ==========================================================================
+  - it: allows TLS on a standard-edition image
+    template: statefulset.yaml
+    set:
+      image.edition: standard
+      tls.enabled: true
+      tls.certData: Y2VydA==
+      tls.keyData: a2V5
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: refuses SASL auth on a standard-edition image
+    template: statefulset.yaml
+    set:
+      image.edition: standard
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: auth.enabled=true requires an image that supports
+            "auth", but image edition "standard" supports: (none). Use a
+            full-edition image (see Dockerfile: STREAMLINE_EDITION=full with
+            STREAMLINE_FEATURES=full) and set image.edition=full, or for a
+            custom build set image.edition=custom and declare
+            image.capabilities explicitly.
+
+  - it: refuses clustering until peer bootstrap is implemented
+    template: statefulset.yaml
+    set:
+      config.clusterEnabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'streamline: config.clusterEnabled is not supported by this chart yet; peer IDs and seed-node bootstrap are not rendered. Keep clusterEnabled=false and replicaCount=1.'
+
+  - it: refuses multiple independent broker replicas
+    template: statefulset.yaml
+    set:
+      replicaCount: 3
+    asserts:
+      - failedTemplate:
+          errorMessage: 'streamline: replicaCount greater than 1 is not supported yet; without peer bootstrap it would create independent brokers rather than a cluster.'
+
+  # An HPA or a KEDA ScaledObject writes the StatefulSet replica count itself,
+  # after install, so accepting either would route around the replicaCount
+  # guard above without the operator ever seeing a value that says so.
+  - it: refuses HPA autoscaling because it would scale past one broker
+    template: statefulset.yaml
+    set:
+      autoscaling.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "autoscaling.enabled=true is not supported by this chart yet.*peer bootstrap is not implemented"
+
+  - it: refuses KEDA autoscaling because it would scale past one broker
+    template: statefulset.yaml
+    set:
+      keda.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "keda.enabled=true is not supported by this chart yet.*peer bootstrap is not implemented"
+
+  - it: names both autoscalers when both are switched on
+    template: statefulset.yaml
+    set:
+      autoscaling.enabled: true
+      keda.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "autoscaling.enabled=true, keda.enabled=true is not supported"
+
+  # A KEDA operator in the cluster does not make clustering exist, so declaring
+  # clustering support on the image must not unlock the autoscaler either.
+  - it: refuses autoscaling even on a clustering-capable image
+    template: statefulset.yaml
+    set:
+      image.edition: full
+      autoscaling.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "autoscaling.enabled=true is not supported by this chart yet"
+
+  - it: renders normally while both autoscalers stay disabled
+    template: statefulset.yaml
+    set:
+      autoscaling.enabled: false
+      keda.enabled: false
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  # The default edition matches what the official publisher builds
+  # (docker-publish.yml: STREAMLINE_EDITION=full), so auth is available without
+  # extra image configuration.
+  - it: allows SASL auth on the default full edition
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: refuses moonshot features even on a full-edition image
+    template: statefulset.yaml
+    set:
+      moonshot.semanticTopics.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: moonshot features are enabled
+            (moonshot.semanticTopics.enabled=true) but this chart does not wire
+            them: no template renders moonshot settings into the ConfigMap or
+            the container arguments, so the deployed server would ignore them.
+            Keep every moonshot.*.enabled at false until the chart configures
+            them; declaring "moonshot" in image.capabilities does not make these
+            settings take effect.
+
+  # The capability only describes what the image contains. Until the chart
+  # renders moonshot settings, accepting them on such an image would deploy a
+  # server that ignores every one of them.
+  - it: refuses moonshot features even when the image declares the capability
+    template: statefulset.yaml
+    set:
+      image.edition: custom
+      image.capabilities:
+        - moonshot
+      moonshot.semanticTopics.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: moonshot features are enabled
+            (moonshot.semanticTopics.enabled=true) but this chart does not wire
+            them: no template renders moonshot settings into the ConfigMap or
+            the container arguments, so the deployed server would ignore them.
+            Keep every moonshot.*.enabled at false until the chart configures
+            them; declaring "moonshot" in image.capabilities does not make these
+            settings take effect.
+
+  - it: names every enabled moonshot setting when refusing to render
+    template: statefulset.yaml
+    set:
+      image.edition: custom
+      image.capabilities:
+        - moonshot
+      moonshot.agentMemory.enabled: true
+      moonshot.branches.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            moonshot features are enabled \(moonshot\.agentMemory\.enabled=true,
+            moonshot\.branches\.enabled=true\)
+
+  - it: renders the workload while every moonshot feature is off
+    template: statefulset.yaml
+    set:
+      moonshot.semanticTopics.enabled: false
+      moonshot.agentMemory.enabled: false
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  - it: allows explicitly declared capabilities on a custom image
+    template: statefulset.yaml
+    set:
+      image.edition: custom
+      image.capabilities:
+        - auth
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - isKind:
+          of: StatefulSet
+
+  # A custom build is an arbitrary STREAMLINE_FEATURES list, so the chart may
+  # never assume it carries auth or clustering. Without a declaration there is
+  # nothing to check a feature against, and inferring "full" would deploy an
+  # unauthenticated broker while the values file says auth is on.
+  - it: refuses a custom edition that declares no capabilities
+    template: statefulset.yaml
+    set:
+      image.edition: custom
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            image\.edition=custom requires an explicit image\.capabilities list
+
+  - it: never infers auth for a custom image that declares only clustering
+    template: statefulset.yaml
+    set:
+      image.edition: custom
+      image.capabilities:
+        - clustering
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            auth\.enabled=true requires an image that supports "auth", but image
+            edition "custom" supports: clustering
+
+  # image.capabilities is a custom-edition declaration only: on standard/full it
+  # would be a second source of truth for a build whose feature list is fixed.
+  - it: refuses an explicit capability list on the full edition
+    template: statefulset.yaml
+    set:
+      image.edition: full
+      image.capabilities:
+        - auth
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            image\.capabilities is only accepted with image\.edition=custom \(edition is "full"\)
+
+  - it: refuses an explicit capability list on the standard edition
+    template: statefulset.yaml
+    set:
+      image.edition: standard
+      image.capabilities:
+        - auth
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            image\.capabilities is only accepted with image\.edition=custom \(edition is "standard"\)
+
+  # An unknown edition is rejected by values.schema.json before rendering; the
+  # template-level guard in _helpers.tpl is the backstop for charts consumed
+  # without schema validation.
+  - it: rejects an unknown image edition
+    template: statefulset.yaml
+    set:
+      image.edition: enterprise
+    asserts:
+      - failedTemplate:
+          errorPattern: "value must be one of 'standard', 'full'"
+
+  # ==========================================================================
+  # config.autoCreateTopics wiring
+  #
+  # Streamline core enables auto topic creation by default, so the ConfigMap
+  # must always carry the explicit value. Omitting the variable for
+  # autoCreateTopics=false would leave the server creating topics the operator
+  # switched off.
+  # ==========================================================================
+  - it: renders autoCreateTopics=false explicitly so the core default is overridden
+    template: configmap.yaml
+    asserts:
+      - equal:
+          path: data.STREAMLINE_AUTO_CREATE_TOPICS
+          value: "false"
+
+  - it: renders autoCreateTopics=true when it is switched on
+    template: configmap.yaml
+    set:
+      config.autoCreateTopics: true
+    asserts:
+      - equal:
+          path: data.STREAMLINE_AUTO_CREATE_TOPICS
+          value: "true"
+
+  # ==========================================================================
+  # config.extraArgs wiring
+  # ==========================================================================
+  - it: passes the image default arguments when no extra args are set
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --listen-addr
+            - 0.0.0.0:9092
+            - --data-dir
+            - /data
+
+  - it: appends config.extraArgs to the default arguments
+    template: statefulset.yaml
+    set:
+      config.extraArgs:
+        - --max-message-bytes
+        - "10485760"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --listen-addr
+            - 0.0.0.0:9092
+            - --data-dir
+            - /data
+            - --max-message-bytes
+            - "10485760"
+
+  - it: honours a custom data directory in the arguments
+    template: statefulset.yaml
+    set:
+      config.dataDir: /var/lib/streamline
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --listen-addr
+            - 0.0.0.0:9092
+            - --data-dir
+            - /var/lib/streamline
+
+  # ==========================================================================
+  # Listener ports are fixed at 9092 (Kafka) and 9094 (HTTP)
+  #
+  # The container ports, the named ports the probes and Services target, the
+  # NetworkPolicy rules and the metrics wiring all hard-code them. A value that
+  # looks like it moves a listener produced a Service pointing at a port
+  # nothing served and probes that never passed, so every one of them is
+  # rejected. values.schema.json rejects these before the templates run; these
+  # cases pin the message an operator actually sees.
+  # ==========================================================================
+  - it: rejects a custom Kafka service port
+    template: statefulset.yaml
+    set:
+      service.kafkaPort: 19092
+    asserts:
+      - failedTemplate:
+          errorPattern: "service.kafkaPort|value must be 9092"
+
+  - it: rejects a custom HTTP service port
+    template: statefulset.yaml
+    set:
+      service.httpPort: 19094
+    asserts:
+      - failedTemplate:
+          errorPattern: "service.httpPort|value must be 9094"
+
+  - it: rejects a custom external Kafka port
+    template: statefulset.yaml
+    set:
+      externalService.enabled: true
+      externalService.kafkaPort: 19092
+    asserts:
+      - failedTemplate:
+          errorPattern: "externalService.kafkaPort|value must be 9092"
+
+  - it: rejects a Kafka listen address on another port
+    template: statefulset.yaml
+    set:
+      config.kafkaAddr: 0.0.0.0:19092
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.kafkaAddr|does not match pattern"
+
+  - it: rejects an HTTP listen address on another port
+    template: statefulset.yaml
+    set:
+      config.httpAddr: 0.0.0.0:8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.httpAddr|does not match pattern"
+
+  - it: rejects a custom inter-broker port
+    template: statefulset.yaml
+    set:
+      config.interBrokerPort: 9095
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.interBrokerPort|value must be 9093"
+
+  - it: rejects NetworkPolicy ingress rules for ports nothing listens on
+    template: statefulset.yaml
+    set:
+      networkPolicy.ingress:
+        - from:
+            - podSelector: {}
+          ports:
+            - port: 8080
+              protocol: TCP
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            networkPolicy\.ingress\[0\]\.ports\[0\]\.port is 8080
+
+  # ==========================================================================
+  # No published image: the chart refuses to render against a tag nobody pushed
+  # ==========================================================================
+  - it: refuses to render without an explicit image tag
+    template: statefulset.yaml
+    set:
+      image.tag: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: >-
+            image\.tag is empty and this chart ships no default tag
+
+  - it: renders the explicitly supplied image reference
+    template: statefulset.yaml
+    set:
+      image.repository: my-registry/streamline
+      image.tag: 2026-03-01-abcdef
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: my-registry/streamline:2026-03-01-abcdef
+
+  # ==========================================================================
+  # TLS wiring
+  #
+  # Env var names verified against Streamline core: STREAMLINE_TLS_CERT,
+  # STREAMLINE_TLS_KEY, STREAMLINE_TLS_CA_CERT,
+  # STREAMLINE_TLS_REQUIRE_CLIENT_CERT.
+  # ==========================================================================
+  - it: requires certificate material when TLS is enabled
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'streamline: tls.enabled=true requires either tls.existingSecret or both tls.certData and tls.keyData.'
+
+  - it: mounts the generated TLS secret
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.certData: Y2VydA==
+      tls.keyData: a2V5
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: RELEASE-NAME-streamline-tls
+              defaultMode: 288
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls
+            mountPath: /etc/streamline/tls
+            readOnly: true
+
+  - it: mounts an existing TLS secret instead of generating one
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: my-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: my-tls
+              defaultMode: 288
+
+  - it: does not generate a TLS secret when an existing secret is used
+    template: secret.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: my-tls
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: exposes TLS file locations to the server under the core env names
+    template: configmap.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: my-tls
+    asserts:
+      - equal:
+          path: data.STREAMLINE_TLS_ENABLED
+          value: "true"
+      - equal:
+          path: data.STREAMLINE_TLS_CERT
+          value: /etc/streamline/tls/tls.crt
+      - equal:
+          path: data.STREAMLINE_TLS_KEY
+          value: /etc/streamline/tls/tls.key
+      - notExists:
+          path: data.STREAMLINE_TLS_REQUIRE_CLIENT_CERT
+      - notExists:
+          path: data.STREAMLINE_TLS_CA_CERT
+      # The pre-reconciliation names were never read by core.
+      - notExists:
+          path: data.STREAMLINE_TLS_CERT_FILE
+      - notExists:
+          path: data.STREAMLINE_TLS_KEY_FILE
+      - notExists:
+          path: data.STREAMLINE_TLS_CA_FILE
+      - notExists:
+          path: data.STREAMLINE_TLS_CLIENT_AUTH
+
+  - it: honours a custom TLS mount path
+    template: configmap.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: my-tls
+      tls.mountPath: /opt/certs
+    asserts:
+      - equal:
+          path: data.STREAMLINE_TLS_CERT
+          value: /opt/certs/tls.crt
+      - equal:
+          path: data.STREAMLINE_TLS_KEY
+          value: /opt/certs/tls.key
+
+  - it: requires CA material for mutual TLS
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.certData: Y2VydA==
+      tls.keyData: a2V5
+      tls.clientAuth: true
+    asserts:
+      - failedTemplate:
+          errorMessage: 'streamline: tls.clientAuth=true requires CA material (tls.caData, or tls.existingSecret containing ca.crt).'
+
+  - it: configures mutual TLS when CA material is present
+    template: configmap.yaml
+    set:
+      tls.enabled: true
+      tls.certData: Y2VydA==
+      tls.keyData: a2V5
+      tls.caData: Y2E=
+      tls.clientAuth: true
+    asserts:
+      - equal:
+          path: data.STREAMLINE_TLS_REQUIRE_CLIENT_CERT
+          value: "true"
+      - equal:
+          path: data.STREAMLINE_TLS_CA_CERT
+          value: /etc/streamline/tls/ca.crt
+
+  # ==========================================================================
+  # SASL auth wiring
+  #
+  # Core authenticates against a YAML users file holding precomputed hashes /
+  # SCRAM credentials (STREAMLINE_AUTH_USERS_FILE) and never reads a username
+  # or password from the environment.
+  # ==========================================================================
+  - it: requires an existing secret when auth is enabled
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: auth.enabled=true requires auth.existingSecret holding
+            the YAML users file (key: auth.usersFileKey, default "users.yaml")
+            with precomputed password hashes or SCRAM credentials. The chart
+            cannot generate those from a plaintext password.
+
+  - it: rejects inline SASL credentials instead of pretending to hash them
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.sasl.username: admin
+      auth.sasl.password: hunter2
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: auth.sasl.username / auth.sasl.password are no longer
+            supported. Streamline core authenticates against a YAML users file
+            containing precomputed hashes or SCRAM credentials and does not read
+            credentials from the environment. Create that file yourself, store
+            it in a Secret and set auth.existingSecret (see helm/README.md).
+
+  # Inline credentials are rejected even when auth is switched off, so a value
+  # left over from an older release can never look like it is in effect.
+  - it: rejects leftover inline SASL credentials even when auth is disabled
+    template: statefulset.yaml
+    set:
+      auth.sasl.password: hunter2
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects the singular auth.sasl.mechanism setting
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.sasl.mechanism: SCRAM-SHA-256
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: auth.sasl.mechanism was replaced by the list
+            auth.sasl.mechanisms (core reads STREAMLINE_AUTH_SASL_MECHANISMS).
+            Set e.g. auth.sasl.mechanisms={SCRAM-SHA-256}.
+
+  - it: rejects the removed per-credential secret keys
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.usernameKey: username
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: auth.usernameKey / auth.passwordKey are no longer
+            supported; the chart mounts a users file instead. Use
+            auth.usersFileKey to name the key inside auth.existingSecret.
+
+  - it: rejects the removed auth.extraSecrets setting
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.extraSecrets:
+        token: abc
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: auth.extraSecrets is no longer supported; the chart no
+            longer generates an auth Secret. Put any additional material in
+            auth.existingSecret.
+
+  - it: requires at least one SASL mechanism
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.sasl.mechanisms: []
+    asserts:
+      - failedTemplate:
+          errorMessage: 'streamline: auth.enabled=true requires a non-empty auth.sasl.mechanisms list (e.g. {SCRAM-SHA-256}).'
+
+  - it: mounts the users file read-only and projects only that key
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: auth
+            secret:
+              secretName: my-auth
+              defaultMode: 288
+              items:
+                - key: users.yaml
+                  path: users.yaml
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: auth
+            mountPath: /etc/streamline/auth
+            readOnly: true
+
+  - it: honours a custom users-file key and mount path
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.usersFileKey: sasl-users.yaml
+      auth.mountPath: /opt/streamline/auth
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: auth
+            secret:
+              secretName: my-auth
+              defaultMode: 288
+              items:
+                - key: sasl-users.yaml
+                  path: sasl-users.yaml
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: auth
+            mountPath: /opt/streamline/auth
+            readOnly: true
+
+  - it: never projects credentials through the container environment
+    template: statefulset.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STREAMLINE_SASL_USERNAME
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STREAMLINE_SASL_PASSWORD
+          any: true
+
+  - it: never generates an auth secret
+    template: secret.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: points the server at the mounted users file and mechanism list
+    template: configmap.yaml
+    set:
+      auth.enabled: true
+      auth.existingSecret: my-auth
+      auth.usersFileKey: sasl-users.yaml
+      auth.mountPath: /opt/streamline/auth
+      auth.sasl.mechanisms:
+        - SCRAM-SHA-256
+        - SCRAM-SHA-512
+    asserts:
+      - equal:
+          path: data.STREAMLINE_AUTH_ENABLED
+          value: "true"
+      - equal:
+          path: data.STREAMLINE_AUTH_SASL_MECHANISMS
+          value: SCRAM-SHA-256,SCRAM-SHA-512
+      - equal:
+          path: data.STREAMLINE_AUTH_USERS_FILE
+          value: /opt/streamline/auth/sasl-users.yaml
+      # The pre-reconciliation name was never read by core.
+      - notExists:
+          path: data.STREAMLINE_SASL_MECHANISM
+
+  - it: keeps auth and TLS out of the configuration when disabled
+    template: configmap.yaml
+    asserts:
+      - notExists:
+          path: data.STREAMLINE_AUTH_ENABLED
+      - notExists:
+          path: data.STREAMLINE_AUTH_USERS_FILE
+      - notExists:
+          path: data.STREAMLINE_TLS_ENABLED
+
+  # ---------------------------------------------------------------------------
+  # Removed settings must never be accepted and then dropped. A key the operator
+  # believes is in effect is worse than a failed render, and `tls.mutualTls` is
+  # the sharpest example: it reads as "mutual TLS is enforced" while the
+  # rendered workload happily accepts unauthenticated clients.
+  # ---------------------------------------------------------------------------
+  - it: rejects the renamed tls.mutualTls instead of silently disabling mTLS
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: streamline-tls
+      tls.mutualTls: true
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: tls.mutualTls was renamed to tls.clientAuth. It was
+            never read by any template, so leaving it set would advertise mutual
+            TLS while the server accepts unauthenticated clients. Set
+            tls.clientAuth instead.
+
+  # Even an explicit `false` is a stale key: it still tells a reader that this
+  # chart understands the setting.
+  - it: rejects tls.mutualTls even when it is set to false
+    template: statefulset.yaml
+    set:
+      tls.mutualTls: false
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects the renamed tls.certSecretName
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.certSecretName: streamline-tls
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: tls.certSecretName was renamed to tls.existingSecret (a
+            kubernetes.io/tls Secret holding tls.crt, tls.key and optionally
+            ca.crt).
+
+  - it: rejects the removed tls certificate path settings
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: streamline-tls
+      tls.certFile: /etc/streamline/tls/tls.crt
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: tls.certFile / tls.keyFile / tls.caFile are no longer
+            supported. The chart mounts the Secret at tls.mountPath and derives
+            the file locations itself (STREAMLINE_TLS_CERT / STREAMLINE_TLS_KEY
+            / STREAMLINE_TLS_CA_CERT). Set tls.mountPath if you need a different
+            directory.
+
+  - it: rejects a leftover top-level extraArgs instead of dropping the arguments
+    template: statefulset.yaml
+    set:
+      extraArgs:
+        - --max-message-bytes
+        - "10485760"
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            streamline: top-level extraArgs moved to config.extraArgs. Extra
+            arguments are now appended to the image's default --listen-addr /
+            --data-dir flags instead of replacing them; a top-level value would
+            be silently ignored.
+
+  # The reconciled spellings must keep working, otherwise the rejections above
+  # would just be a dead end for anyone migrating.
+  - it: accepts the reconciled tls.clientAuth and config.extraArgs spellings
+    template: statefulset.yaml
+    set:
+      tls.enabled: true
+      tls.existingSecret: streamline-tls
+      tls.clientAuth: true
+      config.extraArgs:
+        - --max-message-bytes
+        - "10485760"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --max-message-bytes
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls
+            secret:
+              secretName: streamline-tls
+              defaultMode: 288

@@ -1,3 +1,4 @@
+{{- include "streamline.validateConfiguration" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,9 +11,10 @@ data:
   STREAMLINE_DATA_DIR: {{ .Values.config.dataDir | quote }}
   STREAMLINE_LISTEN_ADDR: {{ .Values.config.kafkaAddr | quote }}
   STREAMLINE_HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
-  {{- if .Values.config.autoCreateTopics }}
-  STREAMLINE_AUTO_CREATE_TOPICS: "true"
-  {{- end }}
+  # Always rendered, both values included: Streamline core defaults auto topic
+  # creation to ON, so omitting the variable for autoCreateTopics=false would
+  # leave the server creating topics the operator explicitly disabled.
+  STREAMLINE_AUTO_CREATE_TOPICS: {{ ternary "true" "false" (eq (.Values.config.autoCreateTopics | toString) "true") | quote }}
   {{- if .Values.config.playground }}
   STREAMLINE_PLAYGROUND: "true"
   {{- end }}
@@ -22,4 +24,36 @@ data:
   {{- if .Values.config.clusterEnabled }}
   STREAMLINE_CLUSTER_ENABLED: "true"
   STREAMLINE_INTER_BROKER_PORT: {{ .Values.config.interBrokerPort | default 9093 | quote }}
+  {{- end }}
+  {{- if .Values.tls.enabled }}
+  {{- $mountPath := .Values.tls.mountPath | default "/etc/streamline/tls" | trimSuffix "/" }}
+  # Verified against Streamline core: the server reads the certificate material
+  # from STREAMLINE_TLS_CERT / STREAMLINE_TLS_KEY / STREAMLINE_TLS_CA_CERT and
+  # requires client certificates via STREAMLINE_TLS_REQUIRE_CLIENT_CERT.
+  #
+  # SCOPE: these variables configure the KAFKA protocol listener (9092). The
+  # HTTP API on 9094 keeps serving plaintext HTTP — the probes below target it
+  # over plain HTTP — so HTTPS for the management API has to be terminated by
+  # an ingress, a reverse proxy or a mesh. Likewise
+  # STREAMLINE_TLS_REQUIRE_CLIENT_CERT is mutual TLS for Kafka clients only;
+  # nothing here asks an HTTP client for a certificate.
+  #
+  # TLS is compiled into every edition, so no capability gate applies here.
+  STREAMLINE_TLS_ENABLED: "true"
+  STREAMLINE_TLS_CERT: {{ printf "%s/%s" $mountPath "tls.crt" | quote }}
+  STREAMLINE_TLS_KEY: {{ printf "%s/%s" $mountPath "tls.key" | quote }}
+  {{- if .Values.tls.clientAuth }}
+  STREAMLINE_TLS_REQUIRE_CLIENT_CERT: "true"
+  STREAMLINE_TLS_CA_CERT: {{ printf "%s/%s" $mountPath "ca.crt" | quote }}
+  {{- else if .Values.tls.caData }}
+  STREAMLINE_TLS_CA_CERT: {{ printf "%s/%s" $mountPath "ca.crt" | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+  # Verified against Streamline core: authentication is driven by a YAML users
+  # file holding precomputed hashes / SCRAM credentials. Core does not read
+  # usernames or passwords from the environment.
+  STREAMLINE_AUTH_ENABLED: "true"
+  STREAMLINE_AUTH_SASL_MECHANISMS: {{ include "streamline.authSaslMechanisms" . | quote }}
+  STREAMLINE_AUTH_USERS_FILE: {{ include "streamline.authUsersFilePath" . | quote }}
   {{- end }}
